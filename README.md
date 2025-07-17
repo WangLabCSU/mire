@@ -1,4 +1,4 @@
-Single-cell Analysis of Host-Microbiome Interactions
+Microbiome Integrated Reconstruction and Estimation
 ================
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
@@ -12,14 +12,12 @@ developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.re
 [![](https://cranlogs.r-pkg.org/badges/mire)](https://cran.r-project.org/package=mire)
 <!-- badges: end -->
 
-An integrated framework for high-resolution microbiome analysis in
-single-cell sequencing. Leveraging Kraken2 for initial taxonomic
-classification, the package performs barcode-aware filtering and
-reconstructs read-level information by integrating cell barcodes and
-UMIs. It quantifies k-mers and aggregates taxon-specific signals across
-multiple taxonomic ranks. This enables accurate reconstruction and
-quantitative profiling of microbial communities at single-cell
-resolution.
+An integrated framework for microbiome reconstruction from sequencing
+data. It leverages tools like Kraken2 for taxonomic classification and
+combines cell barcodes, UMIs, and k-mer-based quantification to
+reconstruct microbial signals. Designed for both bulk and single-cell
+sequencing data, the package enables taxonomic and quantitative
+profiling of microbial communities.
 
 ## Installation
 
