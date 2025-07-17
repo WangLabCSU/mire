@@ -29,7 +29,7 @@ pub(crate) mod utils;
 // See corresponding C code in `entrypoint.c`.
 // For methods, we'll call it directly with R function `call_rust_method`
 extendr_module! {
-    mod scmire;
+    mod mire;
     use kreport;
     use seq_refine;
     use koutput_reads;

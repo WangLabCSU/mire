@@ -27,12 +27,12 @@ clarity in the embedded header.}
 process. Must be created using the \code{\link[=seq_range]{seq_range()}} function.}
 }
 \value{
-An annotated \code{scmire_seq_range} or \code{scmire_seq_ranges} object. object
+An annotated \code{mire_seq_range} or \code{mire_seq_ranges} object. object
 with behavior-specific class:
 \itemize{
-\item \code{scmire_embed} — for embedding only
-\item \code{scmire_trim} — for trimming only
-\item \code{scmire_embed_trim} — for embedding and trimming
+\item \code{mire_embed} — for embedding only
+\item \code{mire_trim} — for trimming only
+\item \code{mire_embed_trim} — for embedding and trimming
 }
 }
 \description{

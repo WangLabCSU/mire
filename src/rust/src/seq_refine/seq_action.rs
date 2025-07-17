@@ -334,15 +334,15 @@ impl TryFrom<&Robj> for SubseqActions {
 impl TryFrom<&Robj> for SeqAction {
     type Error = Error;
     fn try_from(value: &Robj) -> Result<Self> {
-        let resolved_action = if value.inherits("scmire_trim") {
+        let resolved_action = if value.inherits("mire_trim") {
             SeqAction::Trim
-        } else if value.inherits("scmire_embed") {
+        } else if value.inherits("mire_embed") {
             SeqAction::Embed(extract_tag_name(value)?)
-        } else if value.inherits("scmire_embed_trim") {
+        } else if value.inherits("mire_embed_trim") {
             SeqAction::EmbedTrim(extract_tag_name(value)?)
         } else {
             return Err(anyhow!(
-                "The object does not inherit a valid action class (expected one of: 'scmire_trim', 'scmire_embed', or 'scmire_embed_trim')."
+                "The object does not inherit a valid action class (expected one of: 'mire_trim', 'mire_embed', or 'mire_embed_trim')."
             ));
         };
         Ok(resolved_action)

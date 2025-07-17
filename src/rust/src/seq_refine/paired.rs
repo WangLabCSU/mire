@@ -378,11 +378,11 @@ mod tests {
         // Check contents
         assert_eq!(
             buf1.as_bytes(),
-            b"@SEQ_ID1 scmire{UMI:ACT}\nACGT\n+\n!!!!\n@SEQ_ID2 scmire{UMI:TGA}\nTGCA\n+\n####\n"
+            b"@SEQ_ID1 mire{UMI:ACT}\nACGT\n+\n!!!!\n@SEQ_ID2 mire{UMI:TGA}\nTGCA\n+\n####\n"
         );
         assert_eq!(
             buf2.as_bytes(),
-            b"@SEQ_ID1 scmire{UMI:ACT}\nTTAA\n+\n$$$$\n@SEQ_ID2 scmire{UMI:TGA}\nAATT\n+\n%%%%\n"
+            b"@SEQ_ID1 mire{UMI:ACT}\nTTAA\n+\n$$$$\n@SEQ_ID2 mire{UMI:TGA}\nAATT\n+\n%%%%\n"
         );
 
         Ok(())

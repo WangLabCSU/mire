@@ -5,11 +5,11 @@ Single-cell Analysis of Host-Microbiome Interactions
 <!-- badges: start -->
 
 [![CRAN
-status](https://www.r-pkg.org/badges/version/scmire)](https://CRAN.R-project.org/package=scmire)
+status](https://www.r-pkg.org/badges/version/mire)](https://CRAN.R-project.org/package=mire)
 [![Project Status: Active - The project has reached a stable, usable
 state and is being actively
 developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
-[![](https://cranlogs.r-pkg.org/badges/scmire)](https://cran.r-project.org/package=scmire)
+[![](https://cranlogs.r-pkg.org/badges/mire)](https://cran.r-project.org/package=mire)
 <!-- badges: end -->
 
 An integrated framework for high-resolution microbiome analysis in
@@ -23,25 +23,25 @@ resolution.
 
 ## Installation
 
-You can install `scmire` from `CRAN` using:
+You can install `mire` from `CRAN` using:
 
 ``` r
 # install.packages("pak")
-pak::pak("scmire")
+pak::pak("mire")
 ```
 
 Alternatively, install the development version from
-[r-universe](https://yunuuuu.r-universe.dev/scmire) with:
+[r-universe](https://yunuuuu.r-universe.dev/mire) with:
 
 ``` r
 pak::repo_add("https://yunuuuu.r-universe.dev")
-pak::pak("scmire")
+pak::pak("mire")
 ```
 
-or from [GitHub](https://github.com/Yunuuuu/scmire) with:
+or from [GitHub](https://github.com/Yunuuuu/mire) with:
 
 ``` r
-pak::pak("Yunuuuu/scmire")
+pak::pak("Yunuuuu/mire")
 ```
 
 You must also install

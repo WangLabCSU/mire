@@ -1,5 +1,5 @@
-# scmire (development version)
+# mire (development version)
 
-# scmire 0.0.2
+# mire 0.0.2
 
 * Initial CRAN submission.

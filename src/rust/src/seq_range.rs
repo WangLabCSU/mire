@@ -224,12 +224,12 @@ impl<'a> IntoIterator for &'a SeqRanges {
 }
 
 /// Extract a vector of `RangeKind` from an R object.
-/// The R object must inherit from either `scmire_seq_range` or `scmire_seq_ranges`.
+/// The R object must inherit from either `mire_seq_range` or `mire_seq_ranges`.
 /// Returns an error if the object is not structured correctly or if the ranges are malformed.
 impl TryFrom<&Robj> for SeqRanges {
     type Error = Error;
     fn try_from(value: &Robj) -> Result<Self, Self::Error> {
-        if value.inherits("scmire_seq_range") {
+        if value.inherits("mire_seq_range") {
             // Only one single range
             return SeqRange::try_from(value).map(|range| {
                 let mut ranges_vec = SeqRanges::with_capacity(1);
@@ -238,9 +238,9 @@ impl TryFrom<&Robj> for SeqRanges {
             });
         }
 
-        if !value.inherits("scmire_seq_ranges") {
+        if !value.inherits("mire_seq_ranges") {
             return Err(anyhow!(
-            "The object does not inherit a valid range class (expected one of: 'scmire_seq_range', or 'scmire_seq_ranges')."
+            "The object does not inherit a valid range class (expected one of: 'mire_seq_range', or 'mire_seq_ranges')."
         ));
         }
 

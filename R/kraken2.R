@@ -60,7 +60,6 @@ kraken2 <- function(reads, ...,
         classified_out = classified_out,
         unclassified_out = unclassified_out,
         db,
-        "--report-minimizer-data",
         sprintf("--threads %d", threads),
         odir = odir,
         kraken2 = kraken2

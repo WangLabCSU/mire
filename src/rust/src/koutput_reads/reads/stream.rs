@@ -164,7 +164,7 @@ pub(in crate::koutput_reads::reads) fn extract_tags_from_desc(
     if let Some(desc) = desc {
         if let Some(start) = TAG_PREFIX_FINDER.find(desc) {
             if let Some(end) = memchr(TAG_SUFFIX, &desc[start ..]) {
-                // Inside `SCMIRE{}`
+                // Inside `MIRE{}`
                 let buf = &desc[start + TAG_PREFIX.len() .. start + end];
 
                 // Parse as tag:seq:tag:seq:...

@@ -21,7 +21,7 @@ use crate::reader::*;
 pub(crate) const BLOCK_SIZE: usize = 8 * 1024 * 1024;
 pub(crate) const BUFFER_SIZE: usize = 4 * 1024 * 1024;
 
-pub(crate) const TAG_PREFIX: &'static [u8] = b"SCMIRE{";
+pub(crate) const TAG_PREFIX: &'static [u8] = b"MIRE{";
 pub(crate) const TAG_SUFFIX: u8 = b'}';
 pub(crate) static TAG_PREFIX_FINDER: std::sync::LazyLock<Finder> =
     std::sync::LazyLock::new(|| Finder::new(TAG_PREFIX));

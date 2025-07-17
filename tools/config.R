@@ -8,11 +8,11 @@ input_profile <- args[[1L]]
 input_features <- args[[2L]]
 
 if (!nzchar(input_profile)) {
-  input_profile <- Sys.getenv("scmire_PROFILE")
+  input_profile <- Sys.getenv("mire_PROFILE")
 }
 
 if (!nzchar(input_features)) {
-  input_features <- Sys.getenv("scmire_FEATURES")
+  input_features <- Sys.getenv("mire_FEATURES")
 }
 
 # check DEBUG and NOT_CRAN environment variables

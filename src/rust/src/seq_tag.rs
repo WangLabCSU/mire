@@ -119,9 +119,9 @@ impl TryFrom<&Robj> for TagRanges {
             .values()
             .into_iter()
             .map(|robj| -> Result<(Bytes, SeqRanges)> {
-                if !robj.inherits("scmire_tag") {
+                if !robj.inherits("mire_tag") {
                     return Err(anyhow!(
-                        "The object does not inherit a valid tag class (expected 'scmire_tag')."
+                        "The object does not inherit a valid tag class (expected 'mire_tag')."
                     ));
                 }
                 let tag = extract_tag_name(&robj)?;

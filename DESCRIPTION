@@ -1,15 +1,14 @@
-Package: scmire
-Title: Single-Cell Microbiome Integrated Reconstruction and Estimation
+Package: mire
+Title: Microbiome Integrated Reconstruction and Estimation
 Version: 0.0.1.9000
 Authors@R:
     person("Yun", "Peng", , "yunyunp96@163.com", role = c("aut", "cre"), comment = c(ORCID = "0000-0003-2801-3332"))
-Description: An integrated framework for high-resolution microbiome analysis in
-    single-cell sequencing. Leveraging Kraken2 for initial taxonomic
-    classification, the package performs barcode-aware filtering and
-    reconstructs read-level information by integrating cell barcodes and UMIs.
-    It quantifies k-mers and aggregates taxon-specific signals across multiple
-    taxonomic ranks. This enables accurate reconstruction and quantitative
-    profiling of microbial communities at single-cell resolution.
+Description: An integrated framework for microbiome reconstruction from
+    sequencing data. It leverages tools like Kraken2 for taxonomic
+    classification and combines cell barcodes, UMIs, and k-mer-based
+    quantification to reconstruct microbial signals. Designed for both bulk and
+    single-cell sequencing data, the package enables taxonomic and quantitative
+    profiling of microbial communities.
 Depends: 
     R (>= 4.2)
 Imports: 
@@ -28,5 +27,5 @@ Encoding: UTF-8
 License: MIT + file LICENSE
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
-URL: https://github.com/WangLabCSU/scmire
-BugReports: https://github.com/WangLabCSU/scmire/issues
+URL: https://github.com/WangLabCSU/mire
+BugReports: https://github.com/WangLabCSU/mire/issues

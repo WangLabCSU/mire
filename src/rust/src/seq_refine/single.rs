@@ -216,12 +216,12 @@ mod tests {
         // Check output contents
         let output_contents = std::fs::read_to_string(output_path).expect("failed to read output");
         assert!(
-            output_contents.contains("@SEQ_ID SCMIRE{UMI:GATTGGGG}"),
+            output_contents.contains("@SEQ_ID MIRE{UMI:GATTGGGG}"),
             "Unexpected output: {}",
             output_contents
         );
         assert!(
-            output_contents.contains("@SEQ_ID2 SCMIRE{UMI:TTCAGGGA}"),
+            output_contents.contains("@SEQ_ID2 MIRE{UMI:TTCAGGGA}"),
             "Unexpected output: {}",
             output_contents
         );

@@ -2,8 +2,8 @@ TARGET = $(subst 64,x86_64,$(subst 32,i686,$(WIN)))-pc-windows-gnu
 
 TARGET_DIR = ./rust/target
 LIBDIR = $(TARGET_DIR)/$(TARGET)/@LIBDIR@
-STATLIB = $(LIBDIR)/libscmire.a
-PKG_LIBS = -L$(LIBDIR) -lscmire -lws2_32 -ladvapi32 -luserenv -lbcrypt -lntdll
+STATLIB = $(LIBDIR)/libmire.a
+PKG_LIBS = -L$(LIBDIR) -lmire -lws2_32 -ladvapi32 -luserenv -lbcrypt -lntdll
 
 all: $(SHLIB) rust_clean
 
