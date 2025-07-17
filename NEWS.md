@@ -1,5 +1,5 @@
-# rsahmi (development version)
+# scmire (development version)
 
-# rsahmi 0.0.2
+# scmire 0.0.2
 
 * Initial CRAN submission.

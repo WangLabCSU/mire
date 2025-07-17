@@ -1,5 +1,5 @@
 [package]
-name = 'rsahmi'
+name = 'scmire'
 publish = false
 version = '0.1.0'
 edition = '2021'
@@ -7,7 +7,7 @@ rust-version = '1.87'
 
 [lib]
 crate-type = ['staticlib']
-name = 'rsahmi'
+name = 'scmire'
 
 [dependencies]
 extendr-api = { version = "0.8.0", features = [ "result_list" ] }

@@ -39,53 +39,41 @@ fn pass_quality_filter(qual: &[u8], threshold: u8) -> bool {
     qual.iter().all(|&q| q >= threshold)
 }
 
-/// ReadCounter tracks reads either by total count or unique UMI.
-enum ReadCounter {
-    /// Count all reads without considering UMI (bulk mode).
-    Total(CountTotal),
-    /// Count only unique UMIs (single-cell mode).
-    Unique(CountUnique<Bytes>),
-}
-
-impl ReadCounter {
-    fn insert(&mut self, item: Option<&[u8]>) {
-        match self {
-            ReadCounter::Total(inner) => inner.insert(()),
-            ReadCounter::Unique(inner) => {
-                // SAFETY: `item` is guaranteed to be `Some` in Unique mode,
-                // as enforced by logic in the `sckmer()` function.
-                inner.insert(Bytes::copy_from_slice(unsafe { item.unwrap_unchecked() }))
-            }
-        }
-    }
-
-    fn count(&self) -> usize {
-        match self {
-            ReadCounter::Total(inner) => inner.count(),
-            ReadCounter::Unique(inner) => inner.count(),
-        }
-    }
-}
-
 /// ReadsAndKmer holds per-(barcode, taxon) statistics:
 /// number of reads, total k-mers, and unique k-mers.
 pub(super) struct ReadsAndKmer {
-    reads: ReadCounter,
+    reads: CountTotal,
+    umi: CountUnique<Bytes>,
     kmer_total: CountTotal,
     kmer_unique: CountUnique<Bytes>,
 }
 
 impl ReadsAndKmer {
-    fn new(reads: ReadCounter, kmer_total: CountTotal, kmer_unique: CountUnique<Bytes>) -> Self {
+    fn new() -> Self {
         Self {
-            reads,
-            kmer_total,
-            kmer_unique,
+            reads: CountTotal::new(),
+            umi: CountUnique::new(),
+            kmer_total: CountTotal::new(),
+            kmer_unique: CountUnique::new(),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            reads: CountTotal::new(),
+            umi: CountUnique::with_capacity(capacity),
+            kmer_total: CountTotal::new(),
+            kmer_unique: CountUnique::with_capacity(capacity),
         }
     }
 
     pub(super) fn reads(&self) -> usize {
         self.reads.count()
+    }
+
+    pub(super) fn umi(&self) -> usize {
+        self.umi.count()
     }
 
     pub(super) fn kmer_total(&self) -> usize {
@@ -97,7 +85,10 @@ impl ReadsAndKmer {
     }
 
     fn add_read(&mut self, umi: Option<&[u8]>) {
-        self.reads.insert(umi);
+        self.reads.insert(());
+        if let Some(umi) = umi {
+            self.umi.insert(Bytes::copy_from_slice(umi))
+        };
     }
 
     /// Extract and add k-mers from a sequence and its LCA annotation.
@@ -237,18 +228,9 @@ pub(super) fn count_kmers_and_reads<'taxid, P: AsRef<Path> + ?Sized>(
 
                                 // ─── Update stats per (barcode, ancestor taxon) ───────
                                 for ancestor in ancestors {
-                                    let entry = barcode_map.entry(*ancestor).or_insert_with(|| {
-                                        let reads = if umi_tag.is_some() {
-                                            ReadCounter::Unique(CountUnique::with_capacity(1))
-                                        } else {
-                                            ReadCounter::Total(CountTotal::new())
-                                        };
-                                        ReadsAndKmer::new(
-                                            reads,
-                                            CountTotal::new(),
-                                            CountUnique::with_capacity(1),
-                                        )
-                                    });
+                                    let entry = barcode_map
+                                        .entry(*ancestor)
+                                        .or_insert_with(|| ReadsAndKmer::new());
                                     entry.add_read(umi);
                                     entry.add_kmers(&kmers);
                                 }

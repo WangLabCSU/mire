@@ -13,10 +13,10 @@ provided.}
 \item{end}{Integer. End position (1-based). Optional if \code{start} is provided.}
 }
 \value{
-A \code{rsahmi_seq_range} or \code{rsahmi_seq_ranges} object.
+A \code{scmire_seq_range} or \code{scmire_seq_ranges} object.
 }
 \description{
-Constructs a \code{rsahmi_seq_range} object representing a UMI/Barcode range with
+Constructs a \code{scmire_seq_range} object representing a UMI/Barcode range with
 optional start and end positions.
 }
 \examples{

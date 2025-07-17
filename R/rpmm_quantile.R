@@ -88,7 +88,7 @@ rpmm_quantile <- function(kreports, study = "current study",
         celllines$with_columns(study = pl$lit("cell lines")),
         how = "vertical"
     )
-    class(out) <- c("rsahmi_rpmm_quantile", class(out))
+    class(out) <- c("scmire_rpmm_quantile", class(out))
     structure(out,
         pvalues = structure(pvalues, names = taxids),
         unmatched_taxa = unmatched_taxa,
@@ -151,7 +151,7 @@ quantile_test <- function(x, ref = 0, p = .5, alternative) {
 #' @importFrom ggplot2 autoplot
 #' @importFrom rlang .data
 #' @export
-autoplot.rsahmi_rpmm_quantile <- function(object, ...) {
+autoplot.scmire_rpmm_quantile <- function(object, ...) {
     rlang::check_dots_empty()
     microbe_for_plot <- attr(object, "truly")[
         order(attr(object, "pvalue")[attr(object, "truly")])
@@ -173,7 +173,7 @@ autoplot.rsahmi_rpmm_quantile <- function(object, ...) {
 }
 
 #' @export
-plot.rsahmi_rpmm_quantile <- function(x, y, ...) {
+plot.scmire_rpmm_quantile <- function(x, y, ...) {
     rlang::check_dots_empty()
     ggplot2::autoplot(object = x, ...)
 }

@@ -1,12 +1,12 @@
 #' Create a UMI/Barcode range
 #'
-#' Constructs a `rsahmi_seq_range` object representing a UMI/Barcode range with
+#' Constructs a `scmire_seq_range` object representing a UMI/Barcode range with
 #' optional start and end positions.
 #'
 #' @param start Integer. Start position (1-based). Optional if `end` is
 #' provided.
 #' @param end Integer. End position (1-based). Optional if `start` is provided.
-#' @return A `rsahmi_seq_range` or `rsahmi_seq_ranges` object.
+#' @return A `scmire_seq_range` or `scmire_seq_ranges` object.
 #' @examples
 #' # Create a single range
 #' seq_range(start = 100, end = 200)
@@ -42,18 +42,18 @@ seq_range <- function(start = NULL, end = NULL) {
 new_seq_range <- function(start, end) {
     structure(
         list(start = start, end = end),
-        class = "rsahmi_seq_range"
+        class = "scmire_seq_range"
     )
 }
 
-is_range <- function(x) inherits(x, c("rsahmi_seq_range", "rsahmi_seq_ranges"))
+is_range <- function(x) inherits(x, c("scmire_seq_range", "scmire_seq_ranges"))
 
-is_seq_range <- function(x) inherits(x, "rsahmi_seq_range")
+is_seq_range <- function(x) inherits(x, "scmire_seq_range")
 
-is_seq_ranges <- function(x) inherits(x, "rsahmi_seq_ranges")
+is_seq_ranges <- function(x) inherits(x, "scmire_seq_ranges")
 
 #' @export
-c.rsahmi_seq_range <- function(...) {
+c.scmire_seq_range <- function(...) {
     dots <- rlang::dots_list(..., .ignore_empty = "all")
     if (any(!vapply(dots, is_range, logical(1), USE.NAMES = FALSE))) {
         cli::cli_abort("{.cls seq_range} can only be combined with each other")
@@ -63,17 +63,17 @@ c.rsahmi_seq_range <- function(...) {
     })
     ranges <- unlist(dots, FALSE, use.names = FALSE)
     if (length(ranges) == 1L) {
-        structure(.subset2(ranges, 1L), class = "rsahmi_seq_range")
+        structure(.subset2(ranges, 1L), class = "scmire_seq_range")
     } else {
-        structure(ranges, class = "rsahmi_seq_ranges")
+        structure(ranges, class = "scmire_seq_ranges")
     }
 }
 
 #' @export
-c.rsahmi_seq_ranges <- c.rsahmi_seq_range
+c.scmire_seq_ranges <- c.scmire_seq_range
 
 #' @export
-print.rsahmi_seq_range <- function(x, ...) {
+print.scmire_seq_range <- function(x, ...) {
     cat("<seq_range>", "\n", sep = "")
     cat(
         .subset2(x, "start") %||% " ",
@@ -83,7 +83,7 @@ print.rsahmi_seq_range <- function(x, ...) {
 }
 
 #' @export
-print.rsahmi_seq_ranges <- function(x, ...) {
+print.scmire_seq_ranges <- function(x, ...) {
     cat(sprintf("<seq_ranges[%d]>", length(x)), "\n", sep = "")
     start <- vapply(x, function(range) {
         start <- .subset2(range, "start")

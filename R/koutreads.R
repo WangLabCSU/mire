@@ -166,24 +166,24 @@ tag <- function(tag, ranges) {
 }
 
 #' @export
-tag.rsahmi_seq_range <- function(tag, ranges) {
+tag.scmire_seq_range <- function(tag, ranges) {
     structure(
         ranges,
         tag = tag,
-        class = c("rsahmi_tag", "rsahmi_seq_range")
+        class = c("scmire_tag", "scmire_seq_range")
     )
 }
 
 #' @export
-tag.rsahmi_seq_ranges <- function(tag, ranges) {
+tag.scmire_seq_ranges <- function(tag, ranges) {
     structure(
         ranges,
         tag = tag,
-        class = c("rsahmi_tag", "rsahmi_seq_ranges")
+        class = c("scmire_tag", "scmire_seq_ranges")
     )
 }
 
-is_tag <- function(x) inherits(x, "rsahmi_tag")
+is_tag <- function(x) inherits(x, "scmire_tag")
 
 check_tag_ranges <- function(tag_ranges, arg = caller_arg(tag_ranges),
                              call = caller_env()) {

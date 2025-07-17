@@ -2,6 +2,6 @@
 "_PACKAGE"
 
 ## usethis namespace: start
-#' @useDynLib rsahmi, .registration = TRUE
+#' @useDynLib scmire, .registration = TRUE
 ## usethis namespace: end
 NULL

@@ -1,14 +1,15 @@
-Package: rsahmi
-Title: Single-Cell Analysis of Host-Microbiome Interactions
-Version: 0.0.2.9000
-Authors@R: 
+Package: scmire
+Title: Single-Cell Microbiome Integrated Reconstruction and Estimation
+Version: 0.0.1.9000
+Authors@R:
     person("Yun", "Peng", , "yunyunp96@163.com", role = c("aut", "cre"), comment = c(ORCID = "0000-0003-2801-3332"))
-Description: A computational resource designed to accurately detect microbial
-    nucleic acids while filtering out contaminants and false-positive taxonomic
-    assignments from standard transcriptomic sequencing of mammalian tissues.
-    For more details, see Ghaddar (2023) <doi:10.1038/s43588-023-00507-1>. This
-    implementation leverages rust for fast and systematic microbial signal
-    recovery and denoising from host tissue genomic sequencing.
+Description: An integrated framework for high-resolution microbiome analysis in
+    single-cell sequencing. Leveraging Kraken2 for initial taxonomic
+    classification, the package performs barcode-aware filtering and
+    reconstructs read-level information by integrating cell barcodes and UMIs.
+    It quantifies k-mers and aggregates taxon-specific signals across multiple
+    taxonomic ranks. This enables accurate reconstruction and quantitative
+    profiling of microbial communities at single-cell resolution.
 Depends: 
     R (>= 4.2)
 Imports: 
@@ -27,5 +28,5 @@ Encoding: UTF-8
 License: MIT + file LICENSE
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
-URL: https://github.com/Yunuuuu/rsahmi
-BugReports: https://github.com/Yunuuuu/rsahmi/issues
+URL: https://github.com/WangLabCSU/scmire
+BugReports: https://github.com/WangLabCSU/scmire/issues

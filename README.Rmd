@@ -15,9 +15,9 @@ knitr::opts_chunk$set(
 ```
 
 <!-- badges: start -->
-[![CRAN status](https://www.r-pkg.org/badges/version/rsahmi)](https://CRAN.R-project.org/package=rsahmi)
+[![CRAN status](https://www.r-pkg.org/badges/version/scmire)](https://CRAN.R-project.org/package=scmire)
 [![Project Status: Active - The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
-[![](https://cranlogs.r-pkg.org/badges/rsahmi)](https://cran.r-project.org/package=rsahmi)
+[![](https://cranlogs.r-pkg.org/badges/scmire)](https://cran.r-project.org/package=scmire)
 [![DOI](https://zenodo.org/badge/605180683.svg)](https://doi.org/10.5281/zenodo.15076675)
 <!-- badges: end -->
 
@@ -29,28 +29,28 @@ the `rust` for fast and systematic microbial signal recovery and denoising from
 host tissue genomic sequencing.
 
 ## Installation
-You can install `rsahmi` from `CRAN` using:
+You can install `scmire` from `CRAN` using:
 ```{r, eval=FALSE}
 # install.packages("pak")
-pak::pak("rsahmi")
+pak::pak("scmire")
 ```
 
 Alternatively, install the development version from
-[r-universe](https://yunuuuu.r-universe.dev/rsahmi) with:
+[r-universe](https://yunuuuu.r-universe.dev/scmire) with:
 
 ```{r, eval=FALSE}
 pak::repo_add("https://yunuuuu.r-universe.dev")
-pak::pak("rsahmi")
+pak::pak("scmire")
 ```
 
-or from [GitHub](https://github.com/Yunuuuu/rsahmi) with:
+or from [GitHub](https://github.com/Yunuuuu/scmire) with:
 ```{r, eval=FALSE}
-pak::pak("Yunuuuu/rsahmi")
+pak::pak("Yunuuuu/scmire")
 ```
 
 You must also install [kraken2](https://github.com/DerrickWood/kraken2/wiki/Manual).
 
-Additionally, `rsahmi` relies on [polars](https://rpolars.github.io/index.html).
+Additionally, `scmire` relies on [polars](https://rpolars.github.io/index.html).
 If you call any functions that require `polars`, you will be prompted to install
 the package.
 
@@ -58,10 +58,10 @@ the package.
 Prepare the output directory and input data
 
 ```{r, eval=FALSE}
-odir <- "rsahmi" # Specify your output directory
+odir <- "scmire" # Specify your output directory
 # For 10x Genomic data, `fq1` only contain barcode and umi, but the official
 # didn't give any information for this. In this way, I prefer using `umi-tools`
-# to transform the `umi` into fq2 and then run `rsahmi` with only fq2.
+# to transform the `umi` into fq2 and then run `scmire` with only fq2.
 fq1 <- # Sequence file
 fq2 <- NULL # can be `NULL`
 if (dir.exists(odir)) dir.create(odir, recursive = TRUE)
@@ -105,7 +105,7 @@ kraken_taxon(
 paths <- fs::dir_ls(odir, type = "directory")
 # this is the time-consuming step, so the internal will save the results in `odir`
 sahmi_datasets <- lapply(paths, function(dir) {
-    rsahmi::prep_dataset(
+    scmire::prep_dataset(
         fa1 = file.path(dir, "kraken_microbiome_reads.fa"),
         # if you have paired sequence, please also specify `fa2`,
         # !!! Also pay attention to the file name of `fa1` (add suffix `_1`) if
@@ -118,14 +118,14 @@ sahmi_datasets <- lapply(paths, function(dir) {
 })
 # If you have run above command, you can use following code
 # to read the datasets
-# sahmi_datasets <- lapply(paths, rsahmi::read_dataset)
+# sahmi_datasets <- lapply(paths, scmire::read_dataset)
 ```
 
 ### Identify contaminants
 ```{r, eval=FALSE}
-library(polars) # rsahmi dependents on `polars`
+library(polars) # scmire dependents on `polars`
 library(ggplot2)
-truly_microbe <- rsahmi::remove_contaminants(
+truly_microbe <- scmire::remove_contaminants(
     file.path(paths, "kraken_report.txt"),
     quantile = 0.99, drop_unmatched_taxa = TRUE
 )
@@ -160,7 +160,7 @@ ggsave("truly_microbe.pdf",
 
 ### Sample level signal denoising
 ```{r, eval=FALSE}
-slsd <- rsahmi::slsd(lapply(sahmi_datasets, `[[`, "kreport"))
+slsd <- scmire::slsd(lapply(sahmi_datasets, `[[`, "kreport"))
 real_taxids_slsd <- slsd$filter(
     pl$col("r1")$gt(0),
     pl$col("r2")$gt(0),
@@ -175,7 +175,7 @@ real_taxids_slsd <- slsd$filter(
 ```{r, eval=FALSE}
 umi_list <- lapply(sahmi_datasets, function(dataset) {
     # Barcode level signal denoising (barcode k-mer correlation test)
-    blsd <- rsahmi::blsd(dataset$kmer)
+    blsd <- scmire::blsd(dataset$kmer)
     real_taxids <- blsd$filter(pl$col("padj")$lt(0.05))$get_column("taxid")
     # only keep taxids pass Sample level signal denoising
     real_taxids <- real_taxids$filter(real_taxids$is_in(real_taxids_slsd))
@@ -190,7 +190,7 @@ umi_list <- lapply(sahmi_datasets, function(dataset) {
 
 ### Taxa umi counting
 ```{r, eval=FALSE}
-counts <- rsahmi::taxa_counts(umi_list, basename(names(umi_list)))
+counts <- scmire::taxa_counts(umi_list, basename(names(umi_list)))
 counts$write_csv(file.path(odir, "taxa_counts.txt"), separator = "\t")
 ```
 

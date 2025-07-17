@@ -26,7 +26,6 @@
 #' @export
 slsd <- function(kreports, method = "spearman", ..., min_reads = 3L,
                  min_minimizer_n_unique = 3L, min_samples = 3L) {
-    use_polars()
     kreports <- lapply(kreports, function(kreport) {
         pl$read_parquet(kreport)
     })

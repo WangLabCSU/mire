@@ -100,6 +100,6 @@ denoise_counts <- function(kreports,
             counts = counts, slsd = slsd_out,
             quantile_test = quantile_test_out
         ),
-        class = "rsahmi"
+        class = "scmire"
     )
 }

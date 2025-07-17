@@ -26,12 +26,12 @@
 #' @param ranges A range or a list of ranges specifying the subsequence(s) to
 #' process. Must be created using the [`seq_range()`] function.
 #'
-#' @return An annotated `rsahmi_seq_range` or `rsahmi_seq_ranges` object. object
+#' @return An annotated `scmire_seq_range` or `scmire_seq_ranges` object. object
 #' with behavior-specific class:
 #' \itemize{
-#'   \item `rsahmi_embed` — for embedding only
-#'   \item `rsahmi_trim` — for trimming only
-#'   \item `rsahmi_embed_trim` — for embedding and trimming
+#'   \item `scmire_embed` — for embedding only
+#'   \item `scmire_trim` — for trimming only
+#'   \item `scmire_embed_trim` — for embedding and trimming
 #' }
 #' @name subseq_actions
 #' @export
@@ -41,20 +41,20 @@ embed <- function(tag, ranges) {
 }
 
 #' @export
-embed.rsahmi_seq_range <- function(tag, ranges) {
+embed.scmire_seq_range <- function(tag, ranges) {
     structure(
         ranges,
         tag = tag,
-        class = c("rsahmi_embed", "rsahmi_seq_action", "rsahmi_seq_range")
+        class = c("scmire_embed", "scmire_seq_action", "scmire_seq_range")
     )
 }
 
 #' @export
-embed.rsahmi_seq_ranges <- function(tag, ranges) {
+embed.scmire_seq_ranges <- function(tag, ranges) {
     structure(
         ranges,
         tag = tag,
-        class = c("rsahmi_embed", "rsahmi_seq_action", "rsahmi_seq_ranges")
+        class = c("scmire_embed", "scmire_seq_action", "scmire_seq_ranges")
     )
 }
 
@@ -63,18 +63,18 @@ embed.rsahmi_seq_ranges <- function(tag, ranges) {
 trim <- function(ranges) UseMethod("trim", ranges)
 
 #' @export
-trim.rsahmi_seq_range <- function(ranges) {
+trim.scmire_seq_range <- function(ranges) {
     structure(
         ranges,
-        class = c("rsahmi_trim", "rsahmi_seq_action", "rsahmi_seq_range")
+        class = c("scmire_trim", "scmire_seq_action", "scmire_seq_range")
     )
 }
 
 #' @export
-trim.rsahmi_seq_ranges <- function(ranges) {
+trim.scmire_seq_ranges <- function(ranges) {
     structure(
         ranges,
-        class = c("rsahmi_trim", "rsahmi_seq_action", "rsahmi_seq_ranges")
+        class = c("scmire_trim", "scmire_seq_action", "scmire_seq_ranges")
     )
 }
 
@@ -86,32 +86,32 @@ embed_trim <- function(tag, ranges) {
 }
 
 #' @export
-embed_trim.rsahmi_seq_range <- function(tag, ranges) {
+embed_trim.scmire_seq_range <- function(tag, ranges) {
     structure(
         ranges,
         tag = tag,
-        class = c("rsahmi_embed_trim", "rsahmi_seq_action", "rsahmi_seq_range")
+        class = c("scmire_embed_trim", "scmire_seq_action", "scmire_seq_range")
     )
 }
 
 #' @export
-embed_trim.rsahmi_seq_ranges <- function(tag, ranges) {
+embed_trim.scmire_seq_ranges <- function(tag, ranges) {
     structure(
         ranges,
         tag = tag,
-        class = c("rsahmi_embed_trim", "rsahmi_seq_action", "rsahmi_seq_ranges")
+        class = c("scmire_embed_trim", "scmire_seq_action", "scmire_seq_ranges")
     )
 }
 
 #' @export
-c.rsahmi_seq_action <- function(...) {
+c.scmire_seq_action <- function(...) {
     cli::cli_abort(c(
-        "Combining multiple {.cls rsahmi_seq_action} objects with {.fn c} is not supported.",
+        "Combining multiple {.cls scmire_seq_action} objects with {.fn c} is not supported.",
         i = "Use {.fn list} to collect multiple actions instead."
     ))
 }
 
-is_action <- function(action) inherits(action, "rsahmi_seq_action")
+is_action <- function(action) inherits(action, "scmire_seq_action")
 need_embed <- function(action) {
-    inherits(action, c("rsahmi_embed_trim", "rsahmi_embed"))
+    inherits(action, c("scmire_embed_trim", "scmire_embed"))
 }

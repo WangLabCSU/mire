@@ -1,7 +1,7 @@
 TARGET_DIR = ./rust/target
 LIBDIR = $(TARGET_DIR)/@LIBDIR@
-STATLIB = $(LIBDIR)/librsahmi.a
-PKG_LIBS = -L$(LIBDIR) -lrsahmi
+STATLIB = $(LIBDIR)/libscmire.a
+PKG_LIBS = -L$(LIBDIR) -lscmire
 
 all: $(SHLIB) rust_clean
 

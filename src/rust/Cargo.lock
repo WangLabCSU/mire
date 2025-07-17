@@ -747,27 +747,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rsahmi"
-version = "0.1.0"
-dependencies = [
- "aho-corasick",
- "anyhow",
- "bytes",
- "crossbeam-channel",
- "extendr-api",
- "flate2",
- "indicatif",
- "isal-rs",
- "libdeflater",
- "memchr",
- "pprof",
- "rand",
- "rayon",
- "rustc-hash",
- "tempfile",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -805,6 +784,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "scmire"
+version = "0.1.0"
+dependencies = [
+ "aho-corasick",
+ "anyhow",
+ "bytes",
+ "crossbeam-channel",
+ "extendr-api",
+ "flate2",
+ "indicatif",
+ "isal-rs",
+ "libdeflater",
+ "memchr",
+ "pprof",
+ "rand",
+ "rayon",
+ "rustc-hash",
+ "tempfile",
 ]
 
 [[package]]
