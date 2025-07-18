@@ -28,8 +28,7 @@ kractor_koutput(
 \item{koutput}{Path to the Kraken2 output file.}
 
 \item{ofile}{A character string. Path to the output file storing the filtered
-Kraken2 output lines that pass taxonomic and exclusion filters. If \code{NULL},
-a default filename \code{"kraken_microbiome_output.txt"} will be used. If the
+Kraken2 output lines that pass taxonomic and exclusion filters. If the
 filename ends with \code{.gz}, output will be automatically compressed using
 gzip.}
 

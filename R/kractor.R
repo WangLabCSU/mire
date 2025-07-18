@@ -6,8 +6,7 @@
 #' and writes the filtered results to an output file.
 #'
 #' @param ofile A character string. Path to the output file storing the filtered
-#'   Kraken2 output lines that pass taxonomic and exclusion filters. If `NULL`,
-#'   a default filename `"kraken_microbiome_output.txt"` will be used. If the
+#'   Kraken2 output lines that pass taxonomic and exclusion filters. If the
 #'   filename ends with `.gz`, output will be automatically compressed using
 #'   gzip.
 #' @param taxonomy Character vector. The set of taxonomic groups to include
