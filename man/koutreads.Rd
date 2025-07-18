@@ -9,9 +9,9 @@ koutreads(
   kreport,
   koutput,
   reads,
+  ofile,
   tag_ranges1 = NULL,
   tag_ranges2 = NULL,
-  ofile = NULL,
   taxonomy = c("D__Bacteria", "D__Fungi", "D__Viruses"),
   exclude = c("9606"),
   koutput_batch = NULL,
@@ -42,6 +42,13 @@ where the first read contains only UMI and barcode information, while the
 second read carries the biological sequence. You can always change the input
 files to treat the actual biological read as read1 if needed.}
 
+\item{ofile}{A character string. Path to the output file that will store the
+matched reads extracted based on Kraken2 classification. The output is
+compressed if the extension is \code{.gz}. This file contains only reads whose
+taxonomic assignments match the filtering criteria, such as \code{taxonomy}
+inclusion and \code{exclude} filters. Useful for downstream analysis like
+quantification of taxon-specific reads.}
+
 \item{tag_ranges1, tag_ranges2}{A list of sequence ranges for extracting tags
 from the first/second read in single-end/paired-end data. If \code{NULL}, no
 additional tag extraction occurs for the first/second read. These ranges
@@ -49,14 +56,6 @@ must be created by the \code{tag()} function, or be a named \code{\link[=seq_ran
 object (in which case it will be automatically wrapped by \code{tag()}). Note
 that the tag embedded by \code{\link[=seq_refine]{seq_refine()}} in the description header will
 always be extracted.}
-
-\item{ofile}{Optional character string. Path to the output file that will
-store the matched reads extracted based on Kraken2 classification. If
-\code{NULL}, a default filename (\code{"kraken_micriobiome_output_reads.txt"}) will
-be used. The output is compressed if the extension is \code{.gz}. This file
-contains only reads whose taxonomic assignments match the filtering
-criteria, such as \code{taxonomy} inclusion and \code{exclude} filters. Useful for
-downstream analysis like quantification of taxon-specific reads.}
 
 \item{taxonomy}{A character vector. The set of taxonomic groups to include
 (default: \code{c("D__Bacteria", "D__Fungi", "D__Viruses")}). This defines the

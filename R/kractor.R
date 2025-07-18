@@ -5,9 +5,9 @@
 #' matching the desired `taxonomy`, `ranks`, `taxa`, `taxids`, and `descendants`
 #' and writes the filtered results to an output file.
 #'
-#' @param ofile Optional path to the output file storing the filtered Kraken2
-#'   output lines that pass taxonomic and exclusion filters. If `NULL`, a
-#'   default filename `"kraken_microbiome_output.txt"` will be used. If the
+#' @param ofile A character string. Path to the output file storing the filtered
+#'   Kraken2 output lines that pass taxonomic and exclusion filters. If `NULL`,
+#'   a default filename `"kraken_microbiome_output.txt"` will be used. If the
 #'   filename ends with `.gz`, output will be automatically compressed using
 #'   gzip.
 #' @param taxonomy Character vector. The set of taxonomic groups to include
@@ -29,7 +29,7 @@
 #'   containing entries corresponding to the specified `taxonomy`, `ranks`,
 #'   `taxa`, `taxids`, and `descendants` extracted from the input `koutput`.
 #' @export
-kractor_koutput <- function(kreport, koutput, ofile = NULL,
+kractor_koutput <- function(kreport, koutput, ofile,
                             taxonomy = c(
                                 "D__Bacteria", "D__Fungi", "D__Viruses"
                             ),
@@ -87,7 +87,7 @@ kractor_reads <- function(koutput, reads, ofile1 = NULL, ofile2 = NULL,
     )
 }
 
-rust_kractor_koutput <- function(kreport, koutput, ofile = NULL,
+rust_kractor_koutput <- function(kreport, koutput, ofile,
                                  taxonomy = c(
                                      "D__Bacteria", "D__Fungi", "D__Viruses"
                                  ),
@@ -102,7 +102,7 @@ rust_kractor_koutput <- function(kreport, koutput, ofile = NULL,
                                  pprof = NULL) {
     assert_string(kreport, allow_empty = FALSE)
     assert_string(koutput, allow_empty = FALSE)
-    assert_string(ofile, allow_empty = FALSE, allow_null = TRUE)
+    assert_string(ofile, allow_empty = FALSE)
     if (!is.null(taxonomy)) {
         taxonomy <- as.character(taxonomy)
         taxonomy <- taxonomy[!is.na(taxonomy)]
@@ -145,8 +145,6 @@ rust_kractor_koutput <- function(kreport, koutput, ofile = NULL,
     koutput_batch <- koutput_batch %||% KOUTPUT_BATCH
     fastq_batch <- fastq_batch %||% FASTQ_BATCH
     chunk_bytes <- chunk_bytes %||% CHUNK_BYTES
-
-    ofile <- ofile %||% "kraken_microbiome_output.txt"
     ofile <- file.path(odir, ofile)
 
     if (is.null(pprof)) {

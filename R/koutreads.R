@@ -24,13 +24,12 @@
 #'   object (in which case it will be automatically wrapped by `tag()`). Note
 #'   that the tag embedded by [`seq_refine()`] in the description header will
 #'   always be extracted.
-#' @param ofile Optional character string. Path to the output file that will
-#'   store the matched reads extracted based on Kraken2 classification. If
-#'   `NULL`, a default filename (`"kraken_micriobiome_output_reads.txt"`) will
-#'   be used. The output is compressed if the extension is `.gz`. This file
-#'   contains only reads whose taxonomic assignments match the filtering
-#'   criteria, such as `taxonomy` inclusion and `exclude` filters. Useful for
-#'   downstream analysis like quantification of taxon-specific reads.
+#' @param ofile A character string. Path to the output file that will store the
+#'   matched reads extracted based on Kraken2 classification. The output is
+#'   compressed if the extension is `.gz`. This file contains only reads whose
+#'   taxonomic assignments match the filtering criteria, such as `taxonomy`
+#'   inclusion and `exclude` filters. Useful for downstream analysis like
+#'   quantification of taxon-specific reads.
 #' @param taxonomy A character vector. The set of taxonomic groups to include
 #'   (default: `c("D__Bacteria", "D__Fungi", "D__Viruses")`). This defines the
 #'   global taxa to consider. Only the descendants within these groups will be
@@ -46,8 +45,8 @@
 #'   and `r code_quote(FASTQ_BATCH, quote = FALSE)` for `fastq_batch`.
 #' @inheritParams seq_refine
 #' @export
-koutreads <- function(kreport, koutput, reads,
-                      tag_ranges1 = NULL, tag_ranges2 = NULL, ofile = NULL,
+koutreads <- function(kreport, koutput, reads, ofile,
+                      tag_ranges1 = NULL, tag_ranges2 = NULL,
                       taxonomy = c("D__Bacteria", "D__Fungi", "D__Viruses"),
                       exclude = c("9606"),
                       koutput_batch = NULL, fastq_batch = NULL,
@@ -55,8 +54,7 @@ koutreads <- function(kreport, koutput, reads,
                       compression_level = 4L,
                       nqueue = NULL, threads = NULL, odir = NULL) {
     rust_koutreads(
-        kreport = kreport, koutput = koutput, reads = reads,
-        ofile = ofile %||% "kraken_micriobiome_output_reads.txt",
+        kreport = kreport, koutput = koutput, reads = reads, ofile = ofile,
         tag_ranges1 = tag_ranges1, tag_ranges2 = tag_ranges2,
         taxonomy = taxonomy,
         exclude = exclude,
@@ -94,7 +92,7 @@ rust_koutreads <- function(kreport, koutput, reads, ofile,
         fq1 <- reads[[1L]]
         fq2 <- reads[[2L]]
     }
-    assert_string(ofile, allow_empty = FALSE, allow_null = FALSE)
+    assert_string(ofile, allow_empty = FALSE)
     tag_ranges1 <- check_tag_ranges(tag_ranges1)
     tag_ranges2 <- check_tag_ranges(tag_ranges2)
     if (!is.null(taxonomy)) {
@@ -123,11 +121,12 @@ rust_koutreads <- function(kreport, koutput, reads, ofile,
     koutput_batch <- koutput_batch %||% KOUTPUT_BATCH
     fastq_batch <- fastq_batch %||% FASTQ_BATCH
     chunk_bytes <- chunk_bytes %||% CHUNK_BYTES
+    ofile <- file.path(odir, ofile)
     if (is.null(pprof)) {
         rust_call(
             "koutput_reads",
             kreport = kreport, koutput = koutput,
-            fq1 = fq1, fq2 = fq2, ofile = file.path(odir, ofile),
+            fq1 = fq1, fq2 = fq2, ofile = ofile,
             taxonomy = taxonomy, exclude = exclude,
             ranges1 = tag_ranges1, ranges2 = tag_ranges2,
             koutput_batch = koutput_batch,
@@ -141,7 +140,7 @@ rust_koutreads <- function(kreport, koutput, reads, ofile,
         rust_call(
             "pprof_koutput_reads",
             kreport = kreport, koutput = koutput,
-            fq1 = fq1, fq2 = fq2, ofile = file.path(odir, ofile),
+            fq1 = fq1, fq2 = fq2, ofile = ofile,
             taxonomy = taxonomy, exclude = exclude,
             ranges1 = tag_ranges1, ranges2 = tag_ranges2,
             koutput_batch = koutput_batch,
