@@ -3,7 +3,7 @@ use std::path::Path;
 
 use aho_corasick::AhoCorasick;
 use anyhow::{anyhow, Context, Result};
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes};
 use crossbeam_channel::{Receiver, Sender};
 use indicatif::ProgressBar;
 use libdeflater::{CompressionLvl, Compressor};
@@ -40,7 +40,7 @@ pub(super) fn parse_koutput<P: AsRef<Path> + ?Sized>(
         // - reader_tx: transfers raw FASTQ records to parser threads
         // - writer_tx: receives compressed byte chunks from parser threads
         let (writer_tx, writer_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = new_channel(nqueue);
-        let (reader_tx, reader_rx): (Sender<Vec<BytesMut>>, Receiver<Vec<BytesMut>>) =
+        let (reader_tx, reader_rx): (Sender<Vec<Bytes>>, Receiver<Vec<Bytes>>) =
             new_channel(nqueue);
 
         // ─── Writer Thread ─────────────────────────────────────

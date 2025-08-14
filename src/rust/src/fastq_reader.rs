@@ -29,7 +29,7 @@ impl<R: Read> FastqReader<R> {
     }
 
     #[inline]
-    fn read_line(&mut self) -> std::io::Result<Option<BytesMut>> {
+    fn read_line(&mut self) -> std::io::Result<Option<Bytes>> {
         self.reader.read_line()
     }
 
@@ -56,26 +56,25 @@ impl<R: Read> FastqReader<R> {
                 pos: self.offset(),
             })?;
         }
-        let _ = header.split_to(1); // remove the '@' from the start of the sequence ID
         let id;
         let desc;
         if let Some(line_pos) = memchr2(b' ', b'\t', &header) {
-            id = header.split_to(line_pos).freeze();
+            id = header.slice(1 .. line_pos);
             let _ = header.split_to(1); // remove the blankspace
                                         // check if description exits
-            if header.is_empty() {
+            if line_pos + 1 >= header.len() {
                 desc = None
             } else {
-                desc = Some(header.freeze());
+                desc = Some(header.slice(line_pos + 1 ..));
             }
         } else {
-            id = header.freeze();
+            id = header.slice(1 ..);
             desc = None;
         }
 
         // 2nd line (sequence) must exist. Otherwise, incomplete record.
         let seq = if let Some(line) = self.read_line()? {
-            Ok(line.freeze())
+            Ok(line)
         } else {
             Err(FastqParseError::IncompleteRecord {
                 record: format!(
@@ -96,29 +95,21 @@ impl<R: Read> FastqReader<R> {
             if line.is_empty() || unsafe { *line.get_unchecked(0) } != b'+' {
                 Err(FastqParseError::InvalidSep {
                     record: format!(
-                        "{}{}\n{}\n{}",
-                        String::from_utf8_lossy(&id),
-                        String::from_utf8_lossy(
-                            desc.as_ref()
-                                .map_or_else(|| -> &[u8] { b"" }, |d| -> &[u8] { &d })
-                        ),
+                        "{}\n{}\n{}",
+                        String::from_utf8_lossy(&header),
                         String::from_utf8_lossy(&seq),
                         String::from_utf8_lossy(&line)
                     ),
                     pos: self.offset(),
                 })
             } else {
-                Ok(line.freeze())
+                Ok(line)
             }
         } else {
             Err(FastqParseError::IncompleteRecord {
                 record: format!(
-                    "{}{}\n{}",
-                    String::from_utf8_lossy(&id),
-                    String::from_utf8_lossy(
-                        desc.as_ref()
-                            .map_or_else(|| -> &[u8] { b"" }, |d| -> &[u8] { &d })
-                    ),
+                    "{}\n{}",
+                    String::from_utf8_lossy(&header),
                     String::from_utf8_lossy(&seq)
                 ),
                 pos: self.offset(),
@@ -132,12 +123,8 @@ impl<R: Read> FastqReader<R> {
                     seq: seq.len(),
                     qual: line.len(),
                     record: format!(
-                        "{}{}\n{}\n{}\n{}",
-                        String::from_utf8_lossy(&id),
-                        String::from_utf8_lossy(
-                            desc.as_ref()
-                                .map_or_else(|| -> &[u8] { b"" }, |d| -> &[u8] { &d })
-                        ),
+                        "{}\n{}\n{}\n{}",
+                        String::from_utf8_lossy(&header),
                         String::from_utf8_lossy(&seq),
                         String::from_utf8_lossy(&sep),
                         String::from_utf8_lossy(&line)
@@ -145,7 +132,7 @@ impl<R: Read> FastqReader<R> {
                     pos: self.offset(),
                 })
             } else {
-                Ok(line.freeze())
+                Ok(line)
             }
         } else {
             Err(FastqParseError::IncompleteRecord {

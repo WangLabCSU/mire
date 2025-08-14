@@ -20,7 +20,6 @@ pub(crate) fn parse_kreport<P: AsRef<Path> + ?Sized>(kreport: &P) -> Result<Vec<
         if line.iter().all(|b| b.is_ascii_whitespace()) {
             continue;
         }
-        let line = line.freeze();
         let fields: Vec<&[u8]> = line.split(|b| *b == b'\t').collect();
         if fields.len() != 6 && fields.len() != 8 {
             return Err(anyhow!(

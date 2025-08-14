@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use indicatif::ProgressBar;
 use memchr::memchr;
 
@@ -85,7 +85,7 @@ impl<R: Read> LineReader<R> {
     }
 
     #[inline]
-    pub(crate) fn read_line(&mut self) -> std::io::Result<Option<BytesMut>> {
+    pub(crate) fn read_line(&mut self) -> std::io::Result<Option<Bytes>> {
         loop {
             self.fill_buf()?;
             if let Some(buffer) = self.buffer.as_mut() {
@@ -105,7 +105,7 @@ impl<R: Read> LineReader<R> {
                         buf.split_to(end)
                     };
                     self.offset += 1;
-                    return Ok(Some(line));
+                    return Ok(Some(line.freeze()));
                 }
 
                 // No newline: accumulate leftover and continue
@@ -116,7 +116,7 @@ impl<R: Read> LineReader<R> {
                     std::mem::swap(&mut self.buffer, &mut self.leftover);
                 }
             } else {
-                let left = std::mem::take(&mut self.leftover);
+                let left = std::mem::take(&mut self.leftover).map(|l| l.freeze());
                 if left.is_some() {
                     self.offset += 1;
                 }

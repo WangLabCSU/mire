@@ -2,7 +2,7 @@ use std::path::Path;
 
 use aho_corasick::AhoCorasick;
 use anyhow::{anyhow, Context, Result};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender};
 use indicatif::{ProgressBar, ProgressFinish};
 use memchr::memchr;
@@ -39,7 +39,7 @@ pub(super) fn parse_koutput<P: AsRef<Path> + ?Sized>(
             Sender<Vec<(Bytes, (Bytes, Bytes, Bytes))>>,
             Receiver<Vec<(Bytes, (Bytes, Bytes, Bytes))>>,
         ) = new_channel(None);
-        let (reader_tx, reader_rx): (Sender<Vec<BytesMut>>, Receiver<Vec<BytesMut>>) =
+        let (reader_tx, reader_rx): (Sender<Vec<Bytes>>, Receiver<Vec<Bytes>>) =
             new_channel(nqueue);
 
         // ─── Parser Thread ─────────────────────────────────────
@@ -55,7 +55,6 @@ pub(super) fn parse_koutput<P: AsRef<Path> + ?Sized>(
                 // let mut compressor = Compressor::new(compression_level);
                 while let Ok(lines) = rx.recv() {
                     'chunk_loop: for line in lines {
-                        let line = line.freeze();
                         let mut field_start = 0usize;
                         let mut field_index = 0usize;
                         let mut sequence_id = None;
