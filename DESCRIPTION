@@ -2,13 +2,16 @@ Package: mire
 Title: Microbiome Integrated Reconstruction and Estimation
 Version: 0.0.1.9000
 Authors@R:
-    person("Yun", "Peng", , "yunyunp96@163.com", role = c("aut", "cre"), comment = c(ORCID = "0000-0003-2801-3332"))
+    person("Yun", "Peng", , "pengyun.me@outlook.com", role = c("aut", "cre"), comment = c(ORCID = "0000-0003-2801-3332"))
 Description: An integrated framework for microbiome reconstruction from
     sequencing data. It leverages tools like Kraken2 for taxonomic
     classification and combines cell barcodes, UMIs, and k-mer-based
     quantification to reconstruct microbial signals. Designed for both bulk and
     single-cell sequencing data, the package enables taxonomic and quantitative
     profiling of microbial communities.
+License: MIT + file LICENSE
+URL: https://github.com/WangLabCSU/mire
+BugReports: https://github.com/WangLabCSU/mire/issues
 Depends: 
     R (>= 4.2)
 Imports:
@@ -17,13 +20,9 @@ Imports:
     rlang,
     ggplot2,
     utils
-SystemRequirements: Cargo (Rust's package manager), rustc, kraken2
-Config/rextendr/version: 0.3.1.9001
-Config/build/copy-method: link
 ByteCompile: true
 Encoding: UTF-8
-License: MIT + file LICENSE
-Roxygen: list(markdown = TRUE)
-URL: https://github.com/WangLabCSU/mire
-BugReports: https://github.com/WangLabCSU/mire/issues
+Config/build/copy-method: link
 Config/roxygen2/version: 8.0.0
+Roxygen: list(markdown = TRUE)
+SystemRequirements: Cargo (Rust's package manager), rustc, kraken2
