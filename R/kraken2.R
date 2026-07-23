@@ -30,7 +30,7 @@
 kraken2 <- function(reads, ...,
                     kreport = "kraken_report.txt",
                     koutput = "kraken_output.txt",
-                    classified_out = "classified.fq",
+                    classified_out = NULL,
                     unclassified_out = NULL, db = NULL, odir = NULL,
                     threads = NULL, kraken2 = NULL) {
     assert_string(kraken2, allow_empty = FALSE, allow_null = TRUE)
