@@ -11,8 +11,7 @@ Description: An integrated framework for microbiome reconstruction from
     profiling of microbial communities.
 Depends: 
     R (>= 4.2)
-Imports: 
-    blit (>= 0.2.0.9000),
+Imports:
     mirai,
     cli,
     rlang,
@@ -26,6 +25,6 @@ ByteCompile: true
 Encoding: UTF-8
 License: MIT + file LICENSE
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
 URL: https://github.com/WangLabCSU/mire
 BugReports: https://github.com/WangLabCSU/mire/issues
+Config/roxygen2/version: 8.0.0
