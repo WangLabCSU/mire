@@ -256,15 +256,21 @@ rust_kractor_reads <- function(koutput, reads, ofile1 = NULL, ofile2 = NULL,
     }
 }
 
+#' @importFrom rlang caller_arg caller_call
 check_queue <- function(queue, default, threads, arg = caller_arg(queue),
-                        call = rlang::caller_call()) {
+                        call = caller_call()) {
     # styler: off
     if (.rlang_check_number(queue, min = 0,
                             allow_null = TRUE,
                             allow_decimal = FALSE,
                             allow_infinite = TRUE) != 0L ||
+                            # -Inf also passes the above check, so explicitly
+                            # ensure queue >= 0
                             (!is.null(queue) && queue < 0)) {
-        cli::cli_abort("{.arg {arg}} must be a non-negtive integer number")
+        cli::cli_abort(
+            "{.arg {arg}} must be a non-negtive integer number",
+            call = call
+        )
     }
     # styler: on
     if (is.null(queue)) {

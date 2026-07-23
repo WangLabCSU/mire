@@ -10,7 +10,7 @@
 #' @inheritParams koutreads
 #' @param umi_tag (Optional) A string specifying the tag used to extract unique
 #' molecular identifiers (UMIs) from each read. If `NULL`, all reads are counted
-#' as total fragments.  Otherwise, only unique UMIs per (barcode, taxon) are
+#' as total fragments. Otherwise, only unique UMIs per (barcode, taxon) are
 #' counted.
 #' @param barcode_tag (Optional) A string specifying the tag used to extract the
 #' cell barcode from each read. If `NULL`, all reads are assumed to originate
@@ -51,20 +51,18 @@ rust_krcount <- function(koutreads, kreport,
     if (is.null(pprof)) {
         rust_call(
             "krcount",
-            koutreads = koutreads, kreport = kreport,
+            koutreads = koutreads, kreport = kreport, taxonomy = taxonomy,
             umi_tag = umi_tag, barcode_tag = barcode_tag,
-            taxonomy = taxonomy, batch_size = batch_size,
-            nqueue = nqueue
+            batch_size = batch_size, nqueue = nqueue
         )
     } else {
         assert_string(odir, allow_empty = FALSE, allow_null = TRUE)
         odir <- odir %||% getwd()
         rust_call(
             "pprof_krcount",
-            koutreads = koutreads, kreport = kreport,
+            koutreads = koutreads, kreport = kreport, taxonomy = taxonomy,
             umi_tag = umi_tag, barcode_tag = barcode_tag,
-            taxonomy = taxonomy, batch_size = batch_size,
-            nqueue = nqueue,
+            batch_size = batch_size, nqueue = nqueue,
             pprof_file = file.path(odir, pprof)
         )
     }

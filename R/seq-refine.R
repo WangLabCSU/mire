@@ -43,8 +43,7 @@
 #'   amount of in-flight data awaiting writing. Default: `3`. Setting this too
 #'   high may increase memory consumption without performance gain.
 #' @param threads Integer. Number of threads to use. Default: `3`.
-#' @param odir A string of directory to save the output files. Please see
-#' `Value` section for details.
+#' @param odir A string of directory to save the output files.
 #'
 #' @return None. Outputs processed FASTQ files as specified by `ofile1` and
 #' `ofile2`.
@@ -122,7 +121,7 @@ rust_seq_refine <- function(reads, ofile1 = NULL, ofile2 = NULL,
             "x" = "{.arg umi_action2}",
             "x" = "{.arg barcode_action2}",
             "x" = "{.arg extra_actions2}",
-            i = "These arguments are only applicable when paired-end reads are provided via {.arg fq2}."
+            i = "These arguments are only applicable when paired-end reads are provided in {.arg reads}."
         ))
     }
 
@@ -195,13 +194,14 @@ rust_seq_refine <- function(reads, ofile1 = NULL, ofile2 = NULL,
     cli::cli_inform(c("v" = "Finished"))
 }
 
+#' @importFrom rlang caller_arg caller_env
 check_ub_action <- function(action, tag, arg = caller_arg(action),
                             call = caller_env()) {
     if (is.null(action)) {
         action
     } else if (is_action(action)) {
         action
-    } else if (is_range(action)) {
+    } else if (is_range(action) && !is_tag(action)) {
         embed_trim(tag, action)
     } else {
         cli::cli_abort(c(
@@ -211,6 +211,7 @@ check_ub_action <- function(action, tag, arg = caller_arg(action),
     }
 }
 
+#' @importFrom rlang caller_arg caller_env
 check_extra_actions <- function(actions, arg = caller_arg(actions),
                                 call = caller_env()) {
     if (is.null(actions)) {
@@ -218,29 +219,23 @@ check_extra_actions <- function(actions, arg = caller_arg(actions),
     }
 
     # Convert single action to list
-    if (is_range(actions)) {
+    if (is_range(actions) || !is.list(actions)) {
         actions <- list(actions)
-    } else if (is.list(actions)) {
-        # Ensure every element in list is a valid range/action object
-        if (any(!vapply(actions, is_range, logical(1), USE.NAMES = FALSE))) {
+    }
+
+    # Ensure every element in list is a valid range/action object
+    for (i in seq_along(actions)) {
+        if (is_action(actions[[i]])) {
+            next
+        } else if (is_range(actions[[i]]) && !is_tag(actions[[i]])) {
+            actions[[i]] <- trim(actions[[i]])
+        } else {
             cli::cli_abort(c(
                 "{.arg {arg}} must be created with {.fn seq_range} or a combination of them using {.fn c}.",
                 i = "You can wrap multiple actions using {.fn list}.",
-                i = "The default action is {.fn trim}, but you may also use {.fn embed} or {.fn embed_trim}."
+                i = "The default action is {.fn trim}, but you can manually define the action with {.fn embed} or {.fn embed_trim}."
             ), call = call)
         }
-    } else {
-        cli::cli_abort(c(
-            "{.arg {arg}} must be created with {.fn seq_range} or a combination of them using {.fn c}.",
-            i = "You can wrap multiple actions using {.fn list}.",
-            i = "The default action is {.fn trim}, but you may also use {.fn embed} or {.fn embed_trim}."
-        ), call = call)
     }
-    lapply(actions, function(action) {
-        # Ensure tag is defined for embed actions
-        if (!is_action(action)) {
-            action <- trim(action)
-        }
-        action
-    })
+    actions
 }

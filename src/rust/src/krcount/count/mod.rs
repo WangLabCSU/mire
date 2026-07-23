@@ -130,7 +130,7 @@ pub(super) fn count_kmers_and_reads<'taxid, P: AsRef<Path> + ?Sized>(
     std::thread::scope(
         |scope| -> Result<HashMap<Bytes, HashMap<&[u8], ReadsAndKmer>>> {
             // Shared queue between reader and parser threads
-            let (reader_tx, reader_rx): (Sender<Vec<BytesMut>>, Receiver<Vec<BytesMut>>) =
+            let (reader_tx, reader_rx): (Sender<Vec<Bytes>>, Receiver<Vec<Bytes>>) =
                 new_channel(nqueue);
 
             // ─── Parser Thread ─────────────────────────────────────
@@ -145,7 +145,6 @@ pub(super) fn count_kmers_and_reads<'taxid, P: AsRef<Path> + ?Sized>(
 
                     while let Ok(lines) = reader_rx.recv() {
                         for line in lines {
-                            let line = line.freeze();
                             let fields: Vec<&[u8]> = line.split(|b| *b == b'\t').collect();
                             if fields.len() != 5 {
                                 return Err(anyhow!("Invalid file: must have 5 fields"));
@@ -248,7 +247,7 @@ pub(super) fn count_kmers_and_reads<'taxid, P: AsRef<Path> + ?Sized>(
                     BUFFER_SIZE,
                     new_reader(input, BUFFER_SIZE, Some(pb))?,
                 );
-                let mut reader_tx: BatchSender<BytesMut> =
+                let mut reader_tx: BatchSender<Bytes> =
                     BatchSender::with_capacity(batch_size, reader_tx);
                 while let Some(line) = reader
                     .read_line()

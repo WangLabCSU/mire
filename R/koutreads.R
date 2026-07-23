@@ -189,48 +189,27 @@ check_tag_ranges <- function(tag_ranges, arg = caller_arg(tag_ranges),
     if (is.null(tag_ranges)) {
         return(tag_ranges)
     }
-    if (is_tag(tag_ranges)) {
+
+    # Convert single range to list
+    if (is_range(tag_ranges) || !is.list(tag_ranges)) {
         tag_ranges <- list(tag_ranges)
-    } else if (is_range(tag_ranges)) {
-        cli::cli_abort(c(
-            "{.arg {arg}} cannot be a bare {.fn seq_range} object.",
-            i = "Wrap it with {.fn tag} to associate it with a tag name, e.g., {.code tag('UMI', seq_range(1, 12))}."
-        ))
-    } else if (is.list(tag_ranges)) {
-        nms <- names(tag_ranges)
-        for (i in seq_along(tag_ranges)) {
-            if (is_tag(tag_ranges[[i]])) {
-                next
-            } else if (is_range(tag_ranges[[i]])) {
-                if (is.null(nms)) {
-                    cli::cli_abort(
-                        "Elements of {.arg {arg}} must be named if they are not already created by {.fn tag}.",
-                        call = call
-                    )
-                }
-                if (is.na(nms[[i]]) || nms[[i]] == "") {
-                    cli::cli_abort(
-                        "Tag name for element {i} of {.arg {arg}} cannot be empty or NA.",
-                        call = call
-                    )
-                }
-                tag_ranges[[i]] <- tag(nms[[i]], tag_ranges[[i]])
-            } else {
-                # Ensure every element in list is a valid range/action object
-                cli::cli_abort(
-                    c(
-                        "{.arg {arg}} must be a list of tag objects created by {.fn tag}.",
-                        i = "Each element must be created by {.fn tag}, or a named {.fn seq_range} that will be auto-wrapped."
-                    ),
-                    call = call
-                )
+    }
+    nms <- names(tag_ranges)
+    for (i in seq_along(tag_ranges)) {
+        if (is_tag(tag_ranges[[i]])) {
+            next
+        } else if (is_range(tag_ranges[[i]]) && !is_action(tag_ranges[[i]])) {
+            if (is.null(nms)) {
+                cli::cli_abort("Elements of {.arg {arg}} must be named or wrapped with {.fn tag}.", call = call)
             }
+            if (is.na(nms[[i]]) || nms[[i]] == "") {
+                cli::cli_abort("Element {i} of {.arg {arg}} has an empty or missing name.", call = call)
+            }
+            tag_ranges[[i]] <- tag(nms[[i]], tag_ranges[[i]])
+        } else {
+            # Ensure every element in list is a valid range/action object
+            cli::cli_abort("{.arg {arg}} must be a list of {.fn tag} objects, or named {.fn seq_range} values (auto-wrapped as tags).", call = call) # nolint
         }
-    } else {
-        cli::cli_abort(c(
-            "{.arg {arg}} must be a list of tag objects created by {.fn tag}.",
-            i = "Each element must be created by {.fn tag}, or a named {.fn seq_range} that will be auto-wrapped."
-        ), call = call)
     }
     if (length(tag_ranges) == 0) tag_ranges <- NULL
     tag_ranges

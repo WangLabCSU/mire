@@ -44,7 +44,10 @@ pub(crate) fn kractor_koutput(
         ));
     }
 
-    let kreports = taxonomy_kreport(kreport, taxonomy)?;
+    let taxonomy =
+        robj_to_option_str(&taxonomy).with_context(|| format!("Failed to parse 'taxonomy'"))?;
+
+    let kreports = taxonomy_kreport(kreport, &taxonomy)?;
     let mut targeted_taxids: Vec<&[u8]>;
     if ranks.is_some() || taxa.is_some() || taxids.is_some() {
         // Parse set of desired taxonomic ranks

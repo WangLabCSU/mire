@@ -197,6 +197,7 @@ fn kractor_match_aho(
     }
     false
 }
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;

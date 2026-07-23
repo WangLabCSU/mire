@@ -1,5 +1,4 @@
-use anyhow::anyhow;
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use bytes::Bytes;
 use extendr_api::prelude::*;
 use rustc_hash::FxHashMap as HashMap;
@@ -14,18 +13,18 @@ use crate::utils::*;
 fn krcount(
     koutreads: &str,
     kreport: &str,
+    taxonomy: Robj,
     umi_tag: Option<&str>,
     barcode_tag: Option<&str>,
-    taxonomy: Robj,
     batch_size: usize,
     nqueue: Option<usize>,
 ) -> std::result::Result<List, String> {
     krcount_internal(
         koutreads,
         kreport,
+        taxonomy,
         umi_tag,
         barcode_tag,
-        taxonomy,
         batch_size,
         nqueue,
     )
@@ -35,13 +34,15 @@ fn krcount(
 fn krcount_internal(
     koutreads: &str,
     kreport: &str,
+    taxonomy: Robj,
     umi_tag: Option<&str>,
     barcode_tag: Option<&str>,
-    taxonomy: Robj,
     batch_size: usize,
     nqueue: Option<usize>,
 ) -> Result<List> {
-    let kreports = taxonomy_kreport(kreport, taxonomy)?;
+    let taxonomy =
+        robj_to_option_str(&taxonomy).with_context(|| format!("Failed to parse 'taxonomy'"))?;
+    let kreports = taxonomy_kreport(kreport, &taxonomy)?;
 
     // ─── Build taxonomic ancestry map ───────────────────
     // Each taxid maps to a set of its ancestor taxids (inclusive)
@@ -197,7 +198,7 @@ fn rank_order_key(rank: &[u8]) -> (usize, usize) {
                 b'S' => 9,
                 _ => 10,
             },
-            parse_usize(&rank[1 ..]).map_or_else(|_| usize::max_value(), |x| x),
+            parse_usize(&rank[1..]).map_or_else(|_| usize::max_value(), |x| x),
         ),
         _ => (10, 0),
     }

@@ -132,7 +132,10 @@ fn koutput_reads_internal(
         .map_err(|e| anyhow!("Invalid 'compression_level': {:?}", e))?;
     let exclude =
         robj_to_option_str(&exclude).with_context(|| format!("Failed to parse 'exclude'"))?;
-    let kreports = taxonomy_kreport(kreport, taxonomy)?;
+    let taxonomy =
+        robj_to_option_str(&taxonomy).with_context(|| format!("Failed to parse 'taxonomy'"))?;
+
+    let kreports = taxonomy_kreport(kreport, &taxonomy)?;
 
     // Build a map: taxid → set of its ancestor taxids
     let taxid_to_ancestors = kreports

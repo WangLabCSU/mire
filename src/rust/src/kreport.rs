@@ -154,10 +154,8 @@ pub(crate) fn parse_kreport<P: AsRef<Path> + ?Sized>(kreport: &P) -> Result<Vec<
 
 pub(crate) fn taxonomy_kreport<P: AsRef<Path> + ?Sized>(
     kreport: &P,
-    taxonomy: Robj,
+    taxonomy: &Option<Vec<&str>>,
 ) -> Result<Vec<Kreport>> {
-    let taxonomy =
-        robj_to_option_str(&taxonomy).with_context(|| format!("Failed to parse 'taxonomy'"))?;
     let path = kreport.as_ref();
     let mut kreports = parse_kreport(path)?;
     if kreports.is_empty() {
@@ -223,7 +221,11 @@ pub(crate) struct Kreport {
 
 #[extendr]
 fn read_kreport(kreport: &str, taxonomy: Robj) -> std::result::Result<List, String> {
-    let kreports = taxonomy_kreport(kreport, taxonomy).map_err(|e| format!("{:?}", e))?;
+    let taxonomy = robj_to_option_str(&taxonomy)
+        .with_context(|| format!("Failed to parse 'taxonomy'"))
+        .map_err(|e| format!("{:?}", e))?;
+
+    let kreports = taxonomy_kreport(kreport, &taxonomy).map_err(|e| format!("{:?}", e))?;
 
     let mut percents = Vec::with_capacity(kreports.len());
     let mut total_reads = Vec::with_capacity(kreports.len());
