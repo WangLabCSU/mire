@@ -16,7 +16,6 @@ Imports:
     cli,
     rlang,
     ggplot2,
-    ShortRead,
     utils
 SystemRequirements: Cargo (Rust's package manager), rustc, kraken2
 Config/rextendr/version: 0.3.1.9001
