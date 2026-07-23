@@ -184,8 +184,9 @@ tag.mire_seq_ranges <- function(tag, ranges) {
 
 is_tag <- function(x) inherits(x, "mire_tag")
 
+#' @importFrom rlang caller_arg caller_call
 check_tag_ranges <- function(tag_ranges, arg = caller_arg(tag_ranges),
-                             call = caller_env()) {
+                             call = caller_call()) {
     if (is.null(tag_ranges)) {
         return(tag_ranges)
     }

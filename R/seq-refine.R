@@ -211,9 +211,9 @@ check_ub_action <- function(action, tag, arg = caller_arg(action),
     }
 }
 
-#' @importFrom rlang caller_arg caller_env
+#' @importFrom rlang caller_arg caller_call
 check_extra_actions <- function(actions, arg = caller_arg(actions),
-                                call = caller_env()) {
+                                call = caller_call()) {
     if (is.null(actions)) {
         return(actions)
     }

@@ -34,3 +34,8 @@ bench = ["dep:pprof"]
 
 [lints.clippy]
 needless_late_init = "allow"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "debuginfo" # Automatically strip symbols from the binary.

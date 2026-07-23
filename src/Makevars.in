@@ -1,7 +1,15 @@
-TARGET_DIR = ./rust/target
-LIBDIR = $(TARGET_DIR)/@LIBDIR@
-STATLIB = $(LIBDIR)/libmire.a
-PKG_LIBS = -L$(LIBDIR) -lmire
+TARGET = @TARGET@
+PROFILE = @PROFILE@
+
+# Add flags if necessary
+# RUSTFLAGS appends --print=native-static-libs to ensure that 
+# the correct linkers are used. Use this for debugging if need. 
+RUSTFLAGS = --print=native-static-libs
+
+TARGET_DIR = rust/target
+LIBDIR = $(TARGET_DIR)/$(TARGET)/$(subst dev,debug,$(PROFILE))
+STATLIB = $(LIBDIR)/lib$(R_PACKAGE_NAME).a
+PKG_LIBS = -L$(LIBDIR) -l$(R_PACKAGE_NAME)
 
 all: $(SHLIB) rust_clean
 
@@ -10,31 +18,33 @@ all: $(SHLIB) rust_clean
 $(SHLIB): $(STATLIB)
 
 CARGOTMP = $(CURDIR)/.cargo
-VENDOR_DIR = $(CURDIR)/vendor
+VENDOR_DIR = vendor
 
+CARGO_BUILD_ARGS = --manifest-path rust/Cargo.toml --lib --target-dir $(TARGET_DIR) @CONFIGURE_ARGS@
 
-# RUSTFLAGS appends --print=native-static-libs to ensure that 
-# the correct linkers are used. Use this for debugging if need. 
-#
-# CRAN note: Cargo and Rustc versions are reported during
-# configure via tools/msrv.R.
-#
-# When the NOT_CRAN flag is *not* set, the vendor.tar.xz, if present,
-# is unzipped and used for offline compilation.
 $(STATLIB):
 
-	# Check if NOT_CRAN is false and unzip vendor.tar.xz if so
-	if [ "$(NOT_CRAN)" != "true" ]; then \
-		if [ -f ./rust/vendor.tar.xz ]; then \
-			tar xf rust/vendor.tar.xz && \
-			mkdir -p $(CARGOTMP) && \
-			cp rust/vendor-config.toml $(CARGOTMP)/config.toml; \
-		fi; \
+	# vendor.tar.xz, if present, is unzipped and used for offline compilation.
+	if [ -f rust/vendor.tar.xz ]; then \
+		tar xf rust/vendor.tar.xz && \
+		mkdir -p $(CARGOTMP) && \
+		cp rust/vendor-config.toml $(CARGOTMP)/config.toml; \
 	fi
-
+	
+	# Emscripten build requires special overrides
 	export CARGO_HOME=$(CARGOTMP) && \
-	export PATH="$(PATH):$(HOME)/.cargo/bin" && \
-	RUSTFLAGS="$(RUSTFLAGS) --print=native-static-libs" cargo build @CRAN_FLAGS@ --lib @PROFILE@ --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR) @FEATURES@
+		export PATH="$(PATH):$(HOME)/.cargo/bin" && \
+	  	export CC="$(CC)" && \
+	  	export CFLAGS="$(CFLAGS)" && \
+	  	export RUSTFLAGS="$(RUSTFLAGS)" && \
+		if [ "$(TARGET)" != "wasm32-unknown-emscripten" ]; then \
+		  cargo build $(CARGO_BUILD_ARGS); \
+		else \
+		  export CARGO_PROFILE_DEV_PANIC="abort" && \
+		  export CARGO_PROFILE_RELEASE_PANIC="abort" && \
+		  export RUSTFLAGS="$(RUSTFLAGS) -Zdefault-visibility=hidden" && \
+		  cargo build -Zbuild-std=panic_abort,std $(CARGO_BUILD_ARGS); \
+		fi
 
 	# Always clean up CARGOTMP
 	rm -Rf $(CARGOTMP);
@@ -43,4 +53,4 @@ rust_clean: $(SHLIB)
 	rm -Rf $(CARGOTMP) $(VENDOR_DIR) @CLEAN_TARGET@
 
 clean:
-	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) $(TARGET_DIR)
+	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) $(TARGET_DIR) $(VENDOR_DIR)
