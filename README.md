@@ -2,10 +2,9 @@ Microbiome Integrated Reconstruction and Estimation
 ================
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
+
 <!-- badges: start -->
 
-[![CRAN
-status](https://www.r-pkg.org/badges/version/mire)](https://CRAN.R-project.org/package=mire)
 [![Project Status: Active - The project has reached a stable, usable
 state and is being actively
 developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
@@ -21,25 +20,31 @@ profiling of microbial communities.
 
 ## Installation
 
-You can install `mire` from `CRAN` using:
+Here, we use `pak` to install package, you can also use `remotes`:
 
 ``` r
-# install.packages("pak")
+if (!requireNamespace("pak")) {
+    install.packages("pak",
+        repos = sprintf(
+            "https://r-lib.github.io/p/pak/devel/%s/%s/%s",
+            .Platform$pkgType, R.Version()$os, R.Version()$arch
+        )
+    )
+}
+```
+
+You can install the development version from
+[r-universe](https://wanglabcsu.r-universe.dev/mire) with:
+
+``` r
+pak::repo_add("https://wanglabcsu.r-universe.dev")
 pak::pak("mire")
 ```
 
-Alternatively, install the development version from
-[r-universe](https://yunuuuu.r-universe.dev/mire) with:
+or from [GitHub](https://github.com/WangLabCSU/mire) with:
 
 ``` r
-pak::repo_add("https://yunuuuu.r-universe.dev")
-pak::pak("mire")
-```
-
-or from [GitHub](https://github.com/Yunuuuu/mire) with:
-
-``` r
-pak::pak("Yunuuuu/mire")
+pak::pak("WangLabCSU/mire")
 ```
 
 You must also install
@@ -49,18 +54,20 @@ You must also install
 
 ``` r
 sessionInfo()
-#> R version 4.4.2 (2024-10-31)
-#> Platform: x86_64-pc-linux-gnu
-#> Running under: Ubuntu 24.04.1 LTS
+#> R version 4.6.1 (2026-06-24)
+#> Platform: x86_64-conda-linux-gnu
+#> Running under: Ubuntu 26.04 LTS
 #> 
 #> Matrix products: default
-#> BLAS/LAPACK: /usr/lib/x86_64-linux-gnu/libmkl_rt.so;  LAPACK version 3.8.0
+#> BLAS/LAPACK: /home/yun/.local/share/pixi/envs/r-release/lib/libopenblasp-r0.3.33.so;  LAPACK version 3.12.0
 #> 
 #> locale:
-#>  [1] LC_CTYPE=C.UTF-8       LC_NUMERIC=C           LC_TIME=C.UTF-8       
-#>  [4] LC_COLLATE=C.UTF-8     LC_MONETARY=C.UTF-8    LC_MESSAGES=C.UTF-8   
-#>  [7] LC_PAPER=C.UTF-8       LC_NAME=C              LC_ADDRESS=C          
-#> [10] LC_TELEPHONE=C         LC_MEASUREMENT=C.UTF-8 LC_IDENTIFICATION=C   
+#>  [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C              
+#>  [3] LC_TIME=en_US.UTF-8        LC_COLLATE=en_US.UTF-8    
+#>  [5] LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+#>  [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                 
+#>  [9] LC_ADDRESS=C               LC_TELEPHONE=C            
+#> [11] LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
 #> 
 #> time zone: Asia/Shanghai
 #> tzcode source: system (glibc)
@@ -69,7 +76,8 @@ sessionInfo()
 #> [1] stats     graphics  grDevices utils     datasets  methods   base     
 #> 
 #> loaded via a namespace (and not attached):
-#>  [1] compiler_4.4.2    fastmap_1.2.0     cli_3.6.5         tools_4.4.2      
-#>  [5] htmltools_0.5.8.1 yaml_2.3.10       rmarkdown_2.29    knitr_1.50       
-#>  [9] xfun_0.52         digest_0.6.37     rlang_1.1.6       evaluate_1.0.3
+#>  [1] compiler_4.6.1  fastmap_1.2.0   cli_3.6.6       tools_4.6.1    
+#>  [5] htmltools_0.5.9 otel_0.2.0      yaml_2.3.12     rmarkdown_2.31 
+#>  [9] knitr_1.51      xfun_0.57       digest_0.6.39   rlang_1.3.0    
+#> [13] evaluate_1.0.5
 ```
