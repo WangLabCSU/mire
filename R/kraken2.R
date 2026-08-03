@@ -39,7 +39,9 @@ kraken2 <- function(reads, ...,
         cli::cli_abort("{.arg reads} must be of length 1 or 2")
     }
     assert_string(odir, allow_empty = FALSE, allow_null = TRUE)
-    odir <- path_trim(odir %||% getwd())
+
+    # remove trailing backslash or slash
+    odir <- sub("(\\\\+|/+)$", "", odir %||% getwd(), perl = TRUE)
     dir_create(odir)
 
     assert_string(kreport, allow_empty = FALSE)
@@ -106,9 +108,4 @@ kraken2 <- function(reads, ...,
             reads
         )
     )
-}
-
-path_trim <- function(path) {
-    # remove trailing backslash or slash
-    sub("(\\\\+|/+)$", "", path, perl = TRUE)
 }
