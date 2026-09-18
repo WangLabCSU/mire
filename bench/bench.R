@@ -14,9 +14,7 @@ system.time(mire:::rust_seq_refine(
     pprof = "pprof_seq_refine.svg",
     threads = 3L
 ))
-bench::mark(
-    kr <- mire:::kraken_report("bench/data/CNP000460_P01N_report.txt")
-)
+bench::mark(kr <- mire:::kraken_report("bench/data/CNP000460_P01N_report.txt"))
 tibble::as_tibble(kr)
 mire:::bench_read("bench/data/CNP000460_P01N_output.txt")
 mire:::bench_read("bench/data/CNP000460_P01N_output.txt", mmap = FALSE)
