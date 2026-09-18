@@ -18,7 +18,7 @@ $(SHLIB): $(STATLIB)
 CARGOTMP = $(CURDIR)/.cargo
 VENDOR_DIR = vendor
 
-CARGO_BUILD_ARGS = --manifest-path rust/Cargo.toml --lib --target-dir $(TARGET_DIR) @CONFIGURE_ARGS@
+CARGO_BUILD_ARGS = --manifest-path rust/Cargo.toml -p mire-r --lib --target-dir $(TARGET_DIR) @CONFIGURE_ARGS@
 
 $(STATLIB):
 	# When the GNU toolchain is used (i.e. on CRAN), -lgcc_eh is specified for

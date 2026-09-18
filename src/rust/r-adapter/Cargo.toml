@@ -1,0 +1,26 @@
+[package]
+name = "mire-r"
+publish = false
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+
+[lib]
+name = "mire"
+crate-type = ["staticlib"]
+
+[dependencies]
+mire-kreport = { path = "../kreport" }
+mire-sequence = { path = "../sequence" }
+mire-koutput = { path = "../koutput" }
+mire-krcount = { path = "../krcount" }
+mire-streaming = { path = "../streaming" }
+extendr-api = { version = "0.8.0", features = ["result_list"] }
+anyhow = "1.0.98"
+bytes = "1.10.1"
+rustc-hash = "2.1.1"
+pprof = { version = "0.14", optional = true, features = ["flamegraph"] }
+
+[features]
+bench = ["dep:pprof"]
+isal = ["mire-streaming/isal"]

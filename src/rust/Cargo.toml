@@ -1,41 +1,9 @@
-[package]
-name = 'mire'
-publish = false
-version = '0.1.0'
-edition = '2021'
-rust-version = '1.87'
-
-[lib]
-crate-type = ['staticlib']
-name = 'mire'
-
-[dependencies]
-extendr-api = { version = "0.8.0", features = [ "result_list" ] }
-anyhow = '*'
-indicatif = '*'
-bytes = '*'
-rayon = '*'
-crossbeam-channel = { version = "*" }
-memchr = { version = "*" }
-aho-corasick = { version = "*" }
-rustc-hash = { version = "*" }
-flate2 = { version = "*", features = ["zlib-rs"]}
-isal-rs = { version = "*", optional = true }
-libdeflater = { version = "*" }
-pprof = { version = "0.14", optional = true, features = ["flamegraph"] }
-
-[dev-dependencies]
-tempfile = '*'
-rand = "0.8"
-
-[features]
-isal = ["dep:isal-rs"]
-bench = ["dep:pprof"]
-
-[lints.clippy]
-needless_late_init = "allow"
+[workspace]
+members = ["kreport", "sequence", "koutput", "krcount", "streaming", "r-adapter"]
+default-members = ["r-adapter"]
+resolver = "2"
 
 [profile.release]
 lto = true
 codegen-units = 1
-strip = "debuginfo" # Automatically strip symbols from the binary.
+strip = "debuginfo"

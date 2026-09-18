@@ -1,0 +1,227 @@
+---
+title: "Single-cell Analysis of Host-Microbiome Interactions"
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment = "#>",
+    fig.path = "man/figures/README-",
+    out.width = "100%"
+)
+```
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+## Installation
+Here, we use `pak` to install package, you can also use `remotes`
+```{r, eval=FALSE}
+if (!requireNamespace("pak")) {
+    install.packages("pak",
+        repos = sprintf(
+            "https://r-lib.github.io/p/pak/devel/%s/%s/%s",
+            .Platform$pkgType, R.Version()$os, R.Version()$arch
+        )
+    )
+}
+```
+
+`rsami` depends on [polars](https://rpolars.github.io/index.html), you can
+install it by:
+```{r, eval=FALSE}
+pak::repo_add("https://rpolars.r-universe.dev")
+pak::pkg_install("polars")
+```
+
+You can also install the development version of `polars` from
+[Github](https://github.com/pola-rs/r-polars) 
+
+In this way, you must install `rustc` to compile `polars`
+
+You can install `rustc` with `rustup`:
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+Then install the `polars` package:
+```{r, eval=FALSE}
+pak::pkg_install("pola-rs/r-polars")
+```
+
+You can install the development version of `rsahmi` from
+[GitHub](https://github.com/Yunuuuu/rsahmi):
+
+```{r, eval=FALSE}
+pak::pkg_install("Yunuuuu/rsahmi")
+```
+
+You must also install [seqkit](https://bioinf.shenwei.me/seqkit/) and
+[kraken2](https://github.com/DerrickWood/kraken2/wiki/Manual). 
+
+
+## Workflow
+```{r}
+library(ggplot2)
+library(polars)
+```
+Prepare output directory and input data
+```{r, eval=FALSE}
+odir <- "rsahmi"
+fq1 <-
+# For 10x Genomic data, `fq1` only contain barcode and umi, but the official
+# didn't give any information for this. In this way, I prefer using `umi-tools` 
+# to transform the `umi` into fq2 and then run `rsahmi` with only fq2.
+fq2 <- # can be `NULL`
+kraken_db <- # specify the kraken database
+if (dir.exists(odir)) dir.create(odir, recursive = TRUE)
+```
+
+### Taxonomic sequence classifier 
+We must run `kraken2` with `--use-names`, and `--report-minimizer-data`,
+`classified_out` is not necessary in `rsahmi` package, but should be specified
+if you want to use official `SAHMI` script.
+
+```{r, eval=FALSE}
+biosys::kraken2(
+    fq1 = fq1,
+    fq2 = fq2,
+    classified_out = "classified.fq",
+    biosys::arg("--threads", 10L, format = "%d"),
+    biosys::arg("--db", kraken_db),
+    "--use-names", "--report-minimizer-data",
+    odir = file.path(odir, sample) # you should change sample into your sample name
+)$run()
+```
+
+### Extract microbiome kraken output
+```{r, eval=FALSE}
+# you should change sample into your sample name
+# 
+# this'll extract all taxids specified in `taxon`
+# which default to: c("d__Bacteria", "d__Fungi", "d__Viruses")
+taxids <- rsahmi::extract_taxids(file.path(odir, sample, "kraken_report.txt"))
+# then we extract the kraken2 output for these taxon.
+rsahmi::extract_kraken_output(
+    file.path(odir, sample, "kraken_output.txt"),
+    taxids = taxids,
+    dir = file.path(odir, sample)
+)
+```
+
+### Extract microbiome kraken reads
+```{r, eval=FALSE}
+# you should change sample into your sample name
+rsahmi::extract_kraken_reads(
+    kraken_out = file.path(odir, sample, "kraken_microbiome_output.txt"),
+    reads = c(fq1, fq2),
+    odir = file.path(odir, sample),
+    threads = 10L,
+    # try to change `seqkit` argument into your seqkit path
+    # If `NULL`, the internal will detect it in your `PATH` environment variable
+    seqkit = NULL
+)
+```
+
+
+**Following workflow will need all samples (multiple), you should run above command for your all samples, then proceed to the subsequent steps.**
+
+### Prepare datasets for signal denoising and taxa counting
+```{r, eval=FALSE}
+# paths: the output directory of all samples (from above steps)
+paths <- fs::dir_ls(odir, type = "directory")
+# this is the time-consuming step, so the internal will save the results in `odir`
+sahmi_datasets <- lapply(paths, function(dir) {
+    rsahmi::prep_dataset(
+        fa1 = file.path(dir, "kraken_microbiome_reads.fa"),
+        # if you have paired sequence, please also specify `fa2`,
+        # !!! Also pay attention to the file name of `fa1` (add suffix `_1`) if
+        #     you use paired reads.
+        # fa2 = file.path(dir, "kraken_microbiome_reads_2.fa"),
+        kraken_report = file.path(dir, "kraken_report.txt"),
+        kraken_out = file.path(dir, "kraken_microbiome_output.txt"),
+        odir = dir
+    )
+})
+# If you have run above command, you can use following code
+# to read the datasets
+# sahmi_datasets <- lapply(paths, rsahmi::read_dataset)
+```
+
+### Identify contaminants
+```{r, eval=FALSE}
+truly_microbe <- rsahmi::remove_contaminants(
+    file.path(paths, "kraken_report.txt"),
+    quantile = 0.99, exclusive = FALSE
+)
+microbe_for_plot <- attr(truly_microbe, "truly")[
+    order(attr(truly_microbe, "pvalue")[attr(truly_microbe, "truly")])
+]
+microbe_for_plot <- microbe_for_plot[
+    !microbe_for_plot %in% attr(truly_microbe, "exclusive")
+]
+
+truly_microbe_density <- ggplot(
+    truly_microbe$filter(pl$col("taxid")$is_in(microbe_for_plot))$
+        to_data_frame(),
+    aes(rpmm),
+) +
+    geom_density(aes(fill = study), alpha = 0.5) +
+    scale_x_log10() +
+    facet_wrap(facets = vars(taxa), scales = "free") +
+    theme(
+        strip.clip = "off",
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        legend.position = "inside",
+        legend.position.inside = c(1, 0),
+        legend.justification.inside = c(1, 0)
+    )
+ggsave("truly_microbe.pdf",
+    plot = truly_microbe_density,
+    width = 8, height = 7L
+)
+```
+
+### Sample level signal denoising
+```{r, eval=FALSE}
+slsd <- rsahmi::slsd(lapply(sahmi_datasets, `[[`, "kreport"))
+real_taxids_slsd <- slsd$filter(
+    pl$col("r1")$gt(0),
+    pl$col("r2")$gt(0),
+    pl$col("r3")$gt(0),
+    pl$col("p1")$lt(0.05),
+    pl$col("p2")$lt(0.05),
+    pl$col("p3")$lt(0.05)
+)$get_column("taxid")
+```
+
+### Filter contaminants
+```{r, eval=FALSE}
+umi_list <- lapply(sahmi_datasets, function(dataset) {
+    # Barcode level signal denoising (barcode k-mer correlation test)
+    blsd <- rsahmi::blsd(dataset$kmer)
+    real_taxids <- blsd$filter(pl$col("padj")$lt(0.05))$get_column("taxid")
+    # only keep taxids pass Sample level signal denoising
+    real_taxids <- real_taxids$filter(real_taxids$is_in(real_taxids_slsd))
+    # remove contaminants
+    real_taxids <- real_taxids$filter(
+        real_taxids$is_in(attr(truly_microbe, "truly"))
+    )
+    # filter UMI data
+    dataset$umi$filter(pl$col("taxid")$is_in(real_taxids))
+})
+```
+
+### Taxa umi counting
+```{r, eval=FALSE}
+counts <- rsahmi::taxa_counts(umi_list, basename(names(umi_list)))
+counts$write_csv(file.path(odir, "taxa_counts.txt"), separator = "\t")
+```
+
+## sessionInfo
+```{r}
+sessionInfo()
+```

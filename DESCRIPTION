@@ -15,7 +15,6 @@ BugReports: https://github.com/WangLabCSU/mire/issues
 Depends: 
     R (>= 4.2)
 Imports:
-    mirai,
     cli,
     rlang,
     ggplot2,
