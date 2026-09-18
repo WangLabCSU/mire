@@ -7,12 +7,22 @@
 read_kreport(kreport, taxonomy = NULL)
 }
 \arguments{
-\item{kreport}{The path to kraken report file.}
+\item{kreport}{A string giving the path to a Kraken2 report file. Both the
+standard six-column format and the eight-column format produced with
+\code{--report-minimizer-data} are supported.}
 
-\item{taxonomy}{A character vector. The set of taxonomic groups to include.}
+\item{taxonomy}{An optional character vector of taxonomic groups to include,
+written as a taxid or \code{"rank__name"}, for example \code{"562"} or
+\code{"D__Bacteria"}. Matching taxa and all their descendants are retained. If
+\code{NULL}, every report row, including the unclassified row, is returned.}
 }
 \value{
-A data frame.
+A data frame containing the report columns \code{percents},
+\code{total_reads}, \code{reads}, \code{rank}, \code{taxid}, and \code{taxon}.
+Eight-column reports additionally contain \code{minimizer_len} and
+\code{minimizer_n_unique}. The list columns \code{ranks}, \code{taxids}, and
+\code{taxa} contain each row's classified lineage; root and unclassified rows
+are not included as ancestors.
 }
 \description{
 Parse kraken report file
