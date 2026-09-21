@@ -6,22 +6,26 @@ use super::vo::{
     KrakenReportEntry, Taxid, TaxidParseError, Taxon, TaxonLevel, TaxonLevelParseError,
 };
 
-// Construct ancestor lineages for classified taxa in report order.
-// Root taxa never become ancestors, and a taxon is excluded from its own lineage.
-pub(crate) struct Context {
+/// Maintain the taxonomic lineage while parsing a Kraken report.
+pub(crate) struct LineageState {
     hierarchy_depths: Vec<usize>,
     lineage: Vec<Taxon>,
 }
 
-impl Context {
+impl LineageState {
+    /// Start a report with no known ancestors.
     pub(crate) fn new() -> Self {
+        Self::with_capacity(10)
+    }
+
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
-            hierarchy_depths: Vec::with_capacity(10),
-            lineage: Vec::with_capacity(10),
+            hierarchy_depths: Vec::with_capacity(capacity),
+            lineage: Vec::with_capacity(capacity),
         }
     }
 
-    // Build the ancestor lineage of the next classified taxon.
+    /// Advance the lineage state and return the taxon's ancestor lineage.
     // Hierarchy depth identifies the parent in the report. It is independent
     // of intermediate rank depth, such as the distance below genus in `G2`.
     // If the immediate parent is absent, the taxon starts a new lineage.
@@ -42,23 +46,23 @@ impl Context {
     }
 }
 
-// Parse report rows and advance the supplied ancestry context.
+// Parse report rows and advance the lineage state.
 pub(crate) struct KrakenReportParser;
 
 impl KrakenReportParser {
-    pub(crate) fn parse_line(
+    pub(crate) fn parse_entry(
         line: &[u8],
-        context: &mut Context,
+        state: &mut LineageState,
     ) -> Result<Option<KrakenReportEntry>, ParseError> {
         if line.iter().all(|byte| byte.is_ascii_whitespace()) {
             return Ok(None);
         }
-        Self::parse_row(line, context).map_err(ParseError)
+        Self::parse_line(line, state).map_err(ParseError)
     }
 
-    fn parse_row(
+    fn parse_line(
         line: &[u8],
-        context: &mut Context,
+        state: &mut LineageState,
     ) -> Result<Option<KrakenReportEntry>, ParseErrorKind> {
         let fields = line.split(|byte| *byte == b'\t').collect::<Vec<_>>();
 
@@ -153,8 +157,8 @@ impl KrakenReportParser {
             return Ok(None);
         }
 
-        // Only complete, classified rows advance the report's ancestry.
-        let lineage = context.advance(&taxon, hierarchy_depth);
+        // Only complete, classified rows advance the lineage state.
+        let lineage = state.advance(&taxon, hierarchy_depth);
 
         Ok(Some(KrakenReportEntry::new(
             percentage,
@@ -263,17 +267,17 @@ mod tests {
     use std::slice;
 
     use super::{
-        Context, KrakenReportEntry, KrakenReportParser, ParseError, ParseErrorKind, Taxid, Taxon,
-        TaxonLevel,
+        KrakenReportEntry, KrakenReportParser, LineageState, ParseError, ParseErrorKind, Taxid,
+        Taxon, TaxonLevel,
     };
 
     fn parse(contents: &[u8]) -> Result<Vec<KrakenReportEntry>, ParseError> {
-        let mut context = Context::new();
+        let mut state = LineageState::new();
         contents
             .strip_suffix(b"\n")
             .unwrap_or(contents)
             .split(|byte| *byte == b'\n')
-            .filter_map(|line| KrakenReportParser::parse_line(line, &mut context).transpose())
+            .filter_map(|line| KrakenReportParser::parse_entry(line, &mut state).transpose())
             .collect()
     }
 
@@ -302,15 +306,13 @@ mod tests {
 
     #[test]
     fn unclassified_rows_return_no_entry() {
-        let mut context = Context::new();
+        let mut state = LineageState::new();
         for minimizers in ["", "20\t5\t"] {
             for rank in ["U", "U1"] {
                 let line = format!("20\t1\t1\t{minimizers}{rank}\t0\tunclassified");
-                assert!(
-                    KrakenReportParser::parse_line(line.as_bytes(), &mut context)
-                        .unwrap()
-                        .is_none()
-                );
+                assert!(KrakenReportParser::parse_entry(line.as_bytes(), &mut state)
+                    .unwrap()
+                    .is_none());
             }
         }
     }
@@ -393,7 +395,7 @@ mod tests {
     }
 
     #[test]
-    fn blank_unclassified_and_invalid_lines_preserve_context() {
+    fn blank_unclassified_and_invalid_lines_preserve_lineage() {
         for (line, fails) in [
             (b" \t\r\n".as_slice(), false),
             (b"20\t1\t1\tU\t0\tunclassified", false),
@@ -401,16 +403,16 @@ mod tests {
             (b"invalid\t4\t0\tD\t3\tArchaea", true),
             (b"100\t4\t0\tG2\t02\t  Genus", true),
         ] {
-            let mut context = Context::new();
-            KrakenReportParser::parse_line(b"100\t4\t0\tD\t2\tBacteria", &mut context)
+            let mut state = LineageState::new();
+            KrakenReportParser::parse_entry(b"100\t4\t0\tD\t2\tBacteria", &mut state)
                 .unwrap()
                 .unwrap();
             assert_eq!(
-                KrakenReportParser::parse_line(line, &mut context).is_err(),
+                KrakenReportParser::parse_entry(line, &mut state).is_err(),
                 fails
             );
             let species =
-                KrakenReportParser::parse_line(b"100\t4\t4\tS\t11\t  Species", &mut context)
+                KrakenReportParser::parse_entry(b"100\t4\t4\tS\t11\t  Species", &mut state)
                     .unwrap()
                     .unwrap();
             assert_eq!(
@@ -438,10 +440,10 @@ mod tests {
 
     #[test]
     fn blank_lines_are_not_report_rows() {
-        let mut context = Context::new();
+        let mut state = LineageState::new();
         for line in [b"".as_slice(), b" ", b"\t", b" \t\r\n\x0c"] {
             assert!(matches!(
-                KrakenReportParser::parse_line(line, &mut context),
+                KrakenReportParser::parse_entry(line, &mut state),
                 Ok(None)
             ));
         }
@@ -449,10 +451,10 @@ mod tests {
 
     #[test]
     fn nonblank_malformed_lines_are_errors() {
-        let mut context = Context::new();
+        let mut state = LineageState::new();
         for line in [b"broken".as_slice(), b" \tbroken\r", b"\0", b"\xc2\xa0"] {
             assert!(matches!(
-                KrakenReportParser::parse_line(line, &mut context),
+                KrakenReportParser::parse_entry(line, &mut state),
                 Err(ParseError(ParseErrorKind::InvalidFieldCount { .. }))
             ));
         }
@@ -506,84 +508,81 @@ mod tests {
 
     #[test]
     fn lineages_contain_only_ancestors_in_report_order() {
-        let mut context = Context::new();
+        let mut state = LineageState::new();
         let bacteria = taxon("D", "2");
         let genus = taxon("G", "10");
         let species = taxon("S", "11");
 
-        assert!(context.advance(&bacteria, 0).is_empty());
-        assert_eq!(context.advance(&genus, 1), slice::from_ref(&bacteria));
-        assert_eq!(context.advance(&species, 2), [bacteria, genus]);
+        assert!(state.advance(&bacteria, 0).is_empty());
+        assert_eq!(state.advance(&genus, 1), slice::from_ref(&bacteria));
+        assert_eq!(state.advance(&species, 2), [bacteria, genus]);
     }
 
     #[test]
     fn siblings_share_ancestors() {
-        let mut context = Context::new();
+        let mut state = LineageState::new();
         let genus = taxon("G", "10");
-        context.advance(&genus, 0);
+        state.advance(&genus, 0);
 
-        let first = context.advance(&taxon("S", "11"), 1);
-        let second = context.advance(&taxon("S", "12"), 1);
+        let first = state.advance(&taxon("S", "11"), 1);
+        let second = state.advance(&taxon("S", "12"), 1);
         assert_eq!(first, slice::from_ref(&genus));
         assert_eq!(second, [genus]);
     }
 
     #[test]
     fn changing_branches_replaces_ancestors_below_the_shared_parent() {
-        let mut context = Context::new();
+        let mut state = LineageState::new();
         let bacteria = taxon("D", "2");
         let next_genus = taxon("G", "20");
-        context.advance(&bacteria, 0);
-        context.advance(&taxon("G", "10"), 1);
-        context.advance(&taxon("S", "11"), 2);
+        state.advance(&bacteria, 0);
+        state.advance(&taxon("G", "10"), 1);
+        state.advance(&taxon("S", "11"), 2);
 
-        assert_eq!(context.advance(&next_genus, 1), slice::from_ref(&bacteria));
-        assert_eq!(
-            context.advance(&taxon("S", "21"), 2),
-            [bacteria, next_genus]
-        );
+        assert_eq!(state.advance(&next_genus, 1), slice::from_ref(&bacteria));
+        assert_eq!(state.advance(&taxon("S", "21"), 2), [bacteria, next_genus]);
     }
 
     #[test]
     fn a_new_top_level_taxon_clears_the_previous_ancestry() {
-        let mut context = Context::new();
-        context.advance(&taxon("D", "2"), 0);
-        context.advance(&taxon("S", "11"), 1);
+        let mut state = LineageState::new();
+        state.advance(&taxon("D", "2"), 0);
+        state.advance(&taxon("S", "11"), 1);
         let archaea = taxon("D", "3");
 
-        assert!(context.advance(&archaea, 0).is_empty());
-        assert_eq!(context.advance(&taxon("S", "31"), 1), [archaea]);
+        assert!(state.advance(&archaea, 0).is_empty());
+        assert_eq!(state.advance(&taxon("S", "31"), 1), [archaea]);
     }
 
     #[test]
     fn a_missing_immediate_parent_starts_a_new_lineage() {
-        let mut context = Context::new();
-        context.advance(&taxon("D", "2"), 0);
+        let mut state = LineageState::new();
+        state.advance(&taxon("D", "2"), 0);
         let genus = taxon("G", "10");
 
-        assert!(context.advance(&genus, 2).is_empty());
-        assert_eq!(context.advance(&taxon("S", "11"), 3), [genus]);
+        assert!(state.advance(&genus, 2).is_empty());
+        assert_eq!(state.advance(&taxon("S", "11"), 3), [genus]);
     }
 
     #[test]
     fn root_taxa_never_become_ancestors() {
         for root_level in ["R", "R1"] {
-            let mut context = Context::new();
+            let mut state = LineageState::new();
             let bacteria = taxon("D", "2");
-            assert!(context.advance(&taxon(root_level, "1"), 0).is_empty());
-            assert!(context.advance(&bacteria, 1).is_empty());
-            assert_eq!(context.advance(&taxon("G", "10"), 2), [bacteria]);
+            assert!(state.advance(&taxon(root_level, "1"), 0).is_empty());
+            assert!(state.advance(&bacteria, 1).is_empty());
+            assert_eq!(state.advance(&taxon("G", "10"), 2), [bacteria]);
         }
     }
 
     #[test]
     fn report_hierarchy_is_independent_of_intermediate_rank_depth() {
-        let mut context = Context::new();
+        let mut state = LineageState::new();
         let bacteria = taxon("D", "2");
         let genus = taxon("G2", "10");
-        context.advance(&bacteria, 0);
+        state.advance(&bacteria, 0);
 
-        assert_eq!(context.advance(&genus, 1), slice::from_ref(&bacteria));
-        assert_eq!(context.advance(&taxon("S", "11"), 2), [bacteria, genus]);
+        assert_eq!(state.advance(&genus, 1), slice::from_ref(&bacteria));
+        assert_eq!(state.advance(&taxon("S", "11"), 2), [bacteria, genus]);
     }
 }

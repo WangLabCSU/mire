@@ -5,7 +5,7 @@ use bytes::{Bytes, BytesMut};
 use memchr::memchr;
 use rustc_hash::FxHashSet as HashSet;
 
-use crate::domain::{Context, KrakenReport, KrakenReportEntry, KrakenReportParser, TaxonSpec};
+use crate::domain::{KrakenReport, KrakenReportEntry, KrakenReportParser, LineageState, TaxonSpec};
 use crate::error::Error;
 
 /// Read a six- or eight-column report from an input source.
@@ -61,7 +61,8 @@ pub fn load_kreport<R: Read>(
 /// ```
 pub struct KrakenReportReader<R> {
     reader: LineReader<R>,
-    context: Context,
+    // Preserve this report's ancestry between calls to the parser.
+    state: LineageState,
     filters: HashSet<TaxonSpec>,
 }
 
@@ -108,7 +109,7 @@ impl<R: Read> KrakenReportReader<R> {
         Self {
             // A zero-byte read buffer would incorrectly make nonempty input look exhausted.
             reader: LineReader::with_capacity(capacity.max(1), reader),
-            context: Context::new(),
+            state: LineageState::new(),
             filters,
         }
     }
@@ -137,7 +138,7 @@ impl<R: Read> KrakenReportReader<R> {
                     }))
                 }
             };
-            let entry = match KrakenReportParser::parse_line(&line, &mut self.context) {
+            let entry = match KrakenReportParser::parse_entry(&line, &mut self.state) {
                 Ok(Some(entry)) => entry,
                 Ok(None) => continue,
                 Err(source) => {
@@ -264,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn readers_keep_report_contexts_independent() {
+    fn readers_keep_report_lineages_independent() {
         let mut bacteria = KrakenReportReader::new(
             b"100\t4\t0\tD\t2\tBacteria\n100\t4\t4\tS\t11\t  Species\n".as_slice(),
         );
