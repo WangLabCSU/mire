@@ -7,7 +7,7 @@ use super::{Rank, Taxid, TaxonLevel};
 /// use kreport::KrakenReportReader;
 /// let input = b"100\t2\t2\tD\t2\tBacteria\n";
 /// let mut reader = KrakenReportReader::new(input.as_slice());
-/// let entry = reader.read_entry().unwrap()?;
+/// let entry = reader.read_entry()?.unwrap();
 /// assert_eq!(entry.taxon().rank().abbre(), "D");
 /// assert_eq!(entry.taxon().taxid().as_str(), "2");
 /// # Ok::<(), Box<dyn std::error::Error>>(())

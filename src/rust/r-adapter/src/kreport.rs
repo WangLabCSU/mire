@@ -24,7 +24,8 @@ struct RKrakenReportTable {
 
 impl RKrakenReportTable {
     fn read<R: Read>(mut reader: KrakenReportReader<R>) -> std::result::Result<Self, ReportError> {
-        std::iter::from_fn(|| reader.read_entry())
+        reader
+            .entries()
             .collect::<std::result::Result<Vec<_>, _>>()
             .map(|entries| {
                 let mut table = Self::with_capacity(entries.len());

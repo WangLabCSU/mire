@@ -13,7 +13,8 @@ pub(crate) struct ReportTaxon {
 pub(crate) fn read_taxa<R: Read>(
     mut reader: KrakenReportReader<R>,
 ) -> Result<Vec<ReportTaxon>, Error> {
-    std::iter::from_fn(|| reader.read_entry())
+    reader
+        .entries()
         .map(|entry| {
             entry.map(|entry| ReportTaxon {
                 taxid: entry.taxon().taxid().as_str().to_owned(),

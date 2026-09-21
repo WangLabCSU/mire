@@ -28,8 +28,8 @@
 //! use kreport::KrakenReportReader;
 //! let input = b"100\t2\t2\tD\t2\tBacteria\n";
 //! let mut reader = KrakenReportReader::new(input.as_slice());
-//! while let Some(entry) = reader.read_entry() {
-//!     println!("{}", entry?.taxon().term());
+//! while let Some(entry) = reader.read_entry()? {
+//!     println!("{}", entry.taxon().term());
 //! }
 //! # Ok::<(), kreport::Error>(())
 //! ```
@@ -44,4 +44,4 @@ pub use self::domain::{
     TaxonLevel, TaxonSpec, TaxonSpecParseError,
 };
 pub use self::error::Error;
-pub use self::reader::{load_kreport, KrakenReportReader};
+pub use self::reader::{load_kreport, Entries, KrakenReportReader};

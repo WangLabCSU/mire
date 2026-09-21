@@ -125,7 +125,7 @@ impl TaxonSpec {
     ///
     /// let input = b"100\t2\t2\tG2\t10\tGenus group\n";
     /// let mut reader = KrakenReportReader::new(input.as_slice());
-    /// let entry = reader.read_entry().unwrap()?;
+    /// let entry = reader.read_entry()?.unwrap();
     /// let spec = TaxonSpec::parse("Genus".into())?;
     /// assert!(spec.is_satisfied_by(entry.taxon()));
     /// # Ok::<(), Box<dyn std::error::Error>>(())

@@ -15,7 +15,8 @@ pub(crate) struct ReportTaxonomy {
 pub(crate) fn read_taxonomy<R: Read>(
     mut reader: KrakenReportReader<R>,
 ) -> Result<ReportTaxonomy, Error> {
-    std::iter::from_fn(|| reader.read_entry())
+    reader
+        .entries()
         .collect::<Result<Vec<_>, _>>()
         .map(|entries| {
             let taxids = entries

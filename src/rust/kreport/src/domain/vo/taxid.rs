@@ -13,7 +13,7 @@ use thiserror::Error;
 /// use kreport::KrakenReportReader;
 /// let input = b"100\t2\t2\tS\t562\tEscherichia coli\n";
 /// let mut reader = KrakenReportReader::new(input.as_slice());
-/// let entry = reader.read_entry().unwrap()?;
+/// let entry = reader.read_entry()?.unwrap();
 /// let taxid = entry.taxon().taxid();
 /// assert_eq!(taxid.as_str(), "562");
 /// # Ok::<(), Box<dyn std::error::Error>>(())

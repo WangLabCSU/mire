@@ -67,12 +67,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input = b"100\t2\t2\tD\t2\tBacteria\n";
     let filters = [TaxonSpec::parse("D__Bacteria".into())?].into_iter().collect();
     let mut reader = KrakenReportReader::with_filters(filters, input.as_slice());
-    while let Some(entry) = reader.read_entry() {
-        println!("{}", entry?.taxon().term());
+    while let Some(entry) = reader.read_entry()? {
+        println!("{}", entry.taxon().term());
     }
     Ok(())
 }
 ```
+
+Use `reader.entries()` to obtain an `Entries` iterator over the remaining selected
+entries. Each item is a `Result<KrakenReportEntry, Error>`; collect the remaining
+entries with `reader.entries().collect::<Result<Vec<_>, _>>()?`.
 
 Both support six- and eight-column reports and preserve report order. Blank and
 unclassified rows are skipped. An entry's `lineage()` contains its taxon's ancestors,
@@ -130,7 +134,7 @@ variants for separate handling, and `std::error::Error::source()` to inspect cau
 
 An empty filter set includes all classified taxa. If no classified entries match,
 `load_kreport` returns an empty report; check `report.is_empty()` for this outcome.
-`KrakenReportReader::read_entry()` returns `None` when no selected entries remain.
+`KrakenReportReader::read_entry()` returns `Ok(None)` when no selected entries remain.
 Taxonomy conditions do not suppress errors in unselected rows.
 
 ## Other workflows

@@ -89,7 +89,7 @@ pub(in crate::domain) struct RankParseError;
 /// use kreport::KrakenReportReader;
 /// let input = b"100\t2\t2\tG2\t10\tGenus group\n";
 /// let mut reader = KrakenReportReader::new(input.as_slice());
-/// let entry = reader.read_entry().unwrap()?;
+/// let entry = reader.read_entry()?.unwrap();
 /// let taxon_level = entry.taxon().level();
 /// assert_eq!(taxon_level.rank().abbre(), "G");
 /// assert_eq!(taxon_level.depth(), 2);
