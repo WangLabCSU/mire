@@ -149,8 +149,10 @@ impl ClassificationFilter {
         parse_taxid(taxon).is_ok_and(|taxid| self.included.contains(taxid)) && !self.excludes(lca)
     }
 
-    /// Preserve the extraction workflow's existing named-taxid selection policy.
+    /// Match included taxids, applying LCA exclusions when supplied.
+    /// Named taxids also match when exclusions are supplied and none are found.
     pub(crate) fn matches_line(&self, line: &[u8]) -> bool {
+        // Preserve the extraction workflow's existing named-taxid selection policy.
         let mut fields = line.split(|byte| *byte == b'\t');
         let Some(taxon) = fields.nth(2) else {
             return false;

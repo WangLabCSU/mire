@@ -1,15 +1,19 @@
+use std::fs::File;
+use std::path::Path;
+
+use bytes::Bytes;
+use kreport::KrakenReportReader;
+use mire_sequence::{read_fastq, FastqPaths};
+use mire_streaming::{ChunkWriter, LineSource, OrderedExecutor, ProcessingOptions, WorkflowError};
+use rustc_hash::FxHashSet as HashSet;
+
 use super::{
     application as classification,
     domain::{joined::ReadJoin, output::ClassificationFilter},
 };
-use crate::{output::ClassifiedReadSink, Result};
-use bytes::Bytes;
-use mire_kreport::{ReportRequest, TaxonSelection};
-use mire_sequence::{read_fastq, FastqPaths};
-use mire_streaming::{ChunkWriter, LineSource, OrderedExecutor, ProcessingOptions, WorkflowError};
-use rustc_hash::FxHashSet as HashSet;
-use std::path::Path;
-/// Extract paired reads by ID; preserve the legacy single-end pass-through policy.
+use crate::{output::ClassifiedReadSink, report::read_taxa, Result};
+
+/// Extract paired reads by ID, or copy all reads from a single-end input.
 ///
 /// # Errors
 /// Returns errors opening the ID list, reading FASTQ, pairing or writing output.
@@ -24,10 +28,14 @@ pub fn extract_reads(
 
 /// Report selection and LCA exclusions for a Kraken output file.
 pub struct ExtractClassificationsRequest<'a> {
-    pub report: ReportRequest<'a>,
+    pub report: &'a str,
+    pub taxonomy: Option<Vec<String>>,
     pub input: &'a str,
     pub output: &'a str,
-    pub selection: TaxonSelection,
+    pub ranks: Option<HashSet<String>>,
+    pub names: Option<HashSet<String>>,
+    pub taxids: Option<HashSet<String>>,
+    pub descendants: bool,
     pub excluded_lca: Option<HashSet<Bytes>>,
 }
 
@@ -39,9 +47,27 @@ pub fn extract_classifications(
     request: ExtractClassificationsRequest<'_>,
     options: ProcessingOptions,
 ) -> Result<()> {
-    let report = request.report.load()?;
+    let filters = request
+        .taxonomy
+        .unwrap_or_default()
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|error| WorkflowError::operation("select taxonomy", error))?;
+    let input = File::open(request.report)
+        .map_err(|error| WorkflowError::operation(format!("open '{}'", request.report), error))?;
+    let reader = KrakenReportReader::with_filters(filters, input);
+    let report = read_taxa(reader).map_err(|error| {
+        WorkflowError::operation(format!("kraken report '{}'", request.report), error)
+    })?;
     let filter = ClassificationFilter::new(
-        report.select_taxids(&request.selection),
+        classification::select_taxids(
+            &report,
+            request.ranks.as_ref(),
+            request.names.as_ref(),
+            request.taxids.as_ref(),
+            request.descendants,
+        ),
         request.excluded_lca,
     )
     .map_err(|error| WorkflowError::operation("build LCA exclusion matcher", error))?;
@@ -59,7 +85,8 @@ pub fn extract_classifications(
 
 /// Inputs and tag extraction policy for joining classifications to reads.
 pub struct JoinReadsRequest<'a> {
-    pub report: ReportRequest<'a>,
+    pub report: &'a str,
+    pub taxonomy: Option<Vec<String>>,
     pub koutput: &'a str,
     pub input1: &'a str,
     pub input2: Option<&'a str>,
@@ -74,11 +101,23 @@ pub struct JoinReadsRequest<'a> {
 /// # Errors
 /// Returns invalid report, read length, tag, pairing and I/O errors.
 pub fn join_reads(request: JoinReadsRequest<'_>, options: ProcessingOptions) -> Result<()> {
-    let report = request.report.load()?;
-    let selected = report.select_taxids(&TaxonSelection {
-        descendants: true,
-        ..Default::default()
-    });
+    let filters = request
+        .taxonomy
+        .unwrap_or_default()
+        .into_iter()
+        .map(TryInto::try_into)
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|error| WorkflowError::operation("select taxonomy", error))?;
+    let input = File::open(request.report)
+        .map_err(|error| WorkflowError::operation(format!("open '{}'", request.report), error))?;
+    let reader = KrakenReportReader::with_filters(filters, input);
+    let report = read_taxa(reader).map_err(|error| {
+        WorkflowError::operation(format!("kraken report '{}'", request.report), error)
+    })?;
+    let selected = report
+        .into_iter()
+        .map(|taxon| Bytes::from(taxon.taxid))
+        .collect();
     let filter = ClassificationFilter::new(selected, request.excluded_lca)
         .map_err(|error| WorkflowError::operation("build LCA exclusion matcher", error))?;
     let classifications = classification::load_classifications(

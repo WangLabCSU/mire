@@ -36,14 +36,16 @@ input files are used.}
 from \code{fq1}/\code{fq2}. \code{umi_action2} is only allowed if \code{fq2} is provided.
 Specify sequence ranges using \code{\link[=seq_range]{seq_range()}} or combine multiple ranges with
 \code{c()}, this also applies to following all actions. By default, the UMI is
-embedded in the header and trimmed from the sequence and quality
+embedded in the header with the tag \code{"UMI"} and trimmed from the sequence
+and quality
 (\code{\link[=embed_trim]{embed_trim()}}). You can customize the behavior with \code{\link[=embed]{embed()}}, or
 \code{\link[=trim]{trim()}}.}
 
 \item{barcode_action1, barcode_action2}{Sequence action for extracting or
 trimming barcodes from \code{fq1}/\code{fq2}. \code{barcode_action2} is only allowed if
-\code{fq2} is provided. By default, barcodes are embedded in the header and
-trimmed from both the sequence and quality strings (\code{\link[=embed_trim]{embed_trim()}}).
+\code{fq2} is provided. By default, barcodes are embedded in the header with the
+tag \code{"BARCODE"} and trimmed from both the sequence and quality strings
+(\code{\link[=embed_trim]{embed_trim()}}).
 Specify ranges as with UMI actions, and customize using \code{\link[=embed]{embed()}}, or
 \code{\link[=trim]{trim()}}.}
 

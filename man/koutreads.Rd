@@ -46,16 +46,16 @@ files to treat the actual biological read as read1 if needed.}
 matched reads extracted based on Kraken2 classification. The output is
 compressed if the extension is \code{.gz}. This file contains only reads whose
 taxonomic assignments match the filtering criteria, such as \code{taxonomy}
-inclusion and \code{exclude} filters. Useful for downstream analysis like
-quantification of taxon-specific reads.}
+inclusion and \code{exclude} filters. Each tab-separated row contains the taxid,
+tags, LCA assignments, sequences and quality scores, in that order.}
 
 \item{tag_ranges1, tag_ranges2}{A list of sequence ranges for extracting tags
 from the first/second read in single-end/paired-end data. If \code{NULL}, no
 additional tag extraction occurs for the first/second read. These ranges
 must be created by the \code{tag()} function, or be a named \code{\link[=seq_range]{seq_range()}}
-object (in which case it will be automatically wrapped by \code{tag()}). Note
-that the tag embedded by \code{\link[=seq_refine]{seq_refine()}} in the description header will
-always be extracted.}
+object (in which case it will be automatically wrapped by \code{tag()}). Tags
+in MIRE header annotations, such as \code{MIRE{UMI:AC:BARCODE:GT}}, are also
+extracted when no tag ranges are supplied.}
 
 \item{taxonomy}{A character vector. The set of taxonomic groups to include
 (default: \code{c("D__Bacteria", "D__Fungi", "D__Viruses")}). This defines the
@@ -97,7 +97,6 @@ high may increase memory consumption without performance gain.}
 process. Must be created using the \code{\link[=seq_range]{seq_range()}} function.}
 }
 \description{
-This function processes Kraken2 output and associated FASTQ files, extracting
-relevant taxonomic information and preparing them for further downstream
-analysis.
+This function joins Kraken2 classifications with FASTQ reads and extracts
+taxonomic assignments, tags, sequences and quality scores.
 }

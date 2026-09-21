@@ -1,4 +1,4 @@
-//! Consumers use the sequence facade without constructing internal FASTQ records.
+//! FASTQ reading and read transformations through the public API.
 use std::io::Write;
 
 use mire_sequence::read_fastq;

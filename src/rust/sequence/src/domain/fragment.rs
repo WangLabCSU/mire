@@ -3,10 +3,10 @@ use thiserror::Error;
 
 use super::record::FastqRecord;
 
-/// An owned FASTQ record backed by shared byte storage.
+/// An owned sequencing read with its FASTQ identifier, description, bases and qualities.
 pub type Read = FastqRecord<Bytes>;
 
-/// The sequencing unit processed by a use case, preserving read-end order.
+/// A sequencing fragment with one read or a pair of reads in read-end order.
 #[derive(Debug)]
 pub struct ReadFragment {
     pub(crate) read1: Read,

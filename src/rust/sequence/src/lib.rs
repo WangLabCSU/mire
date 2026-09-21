@@ -1,5 +1,6 @@
 //! Sequence ranges, tags and read refinement.
-//! Callers read validated fragments and use their accessors; domain fields stay private.
+//!
+//! Read FASTQ fragments, extract tags, trim sequence ranges and write refined reads.
 //!
 //! ```no_run
 //! use mire_streaming::RecordSource;

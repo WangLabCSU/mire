@@ -1,7 +1,7 @@
-use super::values::strings_arg;
 use extendr_api::prelude::*;
 use mire_krcount::{self as workflows, CountRequest};
-use mire_kreport::ReportRequest;
+
+use super::values::strings_arg;
 
 #[extendr]
 fn krcount(
@@ -14,10 +14,8 @@ fn krcount(
     nqueue: Option<usize>,
 ) -> std::result::Result<List, String> {
     let request = CountRequest {
-        report: ReportRequest {
-            path: kreport,
-            taxonomy: strings_arg(&taxonomy, "taxonomy")?,
-        },
+        report: kreport,
+        taxonomy: strings_arg(&taxonomy, "taxonomy")?,
         input: koutreads,
         umi_tag: umi_tag.map(str::to_owned),
         barcode_tag: barcode_tag.map(str::to_owned),

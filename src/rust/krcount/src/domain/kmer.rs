@@ -13,7 +13,7 @@ pub(crate) enum KmerError {
     ReadLayout,
 }
 
-/// A k-mer count has different units from a k-mer's nucleotide length.
+/// The number of k-mer occurrences reported for a read.
 #[derive(Debug, PartialEq, Eq)]
 struct KmerCount(usize);
 

@@ -1,15 +1,15 @@
 use bytes::Bytes;
+use mire_streaming::{RecordExecutor, RecordSink, RecordSource, Result};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use super::domain::{
     kmer::extract_kmers,
     record::{CountError, CountRecord},
     statistics::BarcodeCounts,
 };
-use mire_kreport::Report;
-use mire_streaming::{RecordExecutor, RecordSink, RecordSource, Result};
 
-pub(crate) struct CountReads<'a> {
-    taxonomy: &'a Report,
+pub(crate) struct CountReads {
+    ancestors: HashMap<Bytes, HashSet<Bytes>>,
     umi_tag: Option<String>,
     barcode_tag: Option<String>,
 }
@@ -21,14 +21,14 @@ struct ReadContribution {
     kmers: Vec<Bytes>,
 }
 
-impl<'a> CountReads<'a> {
+impl CountReads {
     pub(crate) fn new(
-        taxonomy: &'a Report,
+        ancestors: HashMap<Bytes, HashSet<Bytes>>,
         umi_tag: Option<String>,
         barcode_tag: Option<String>,
     ) -> Self {
         Self {
-            taxonomy,
+            ancestors,
             umi_tag,
             barcode_tag,
         }
@@ -44,7 +44,7 @@ impl<'a> CountReads<'a> {
         if !record.passes_filters() {
             return Ok(None);
         }
-        let Some(ancestors) = self.taxonomy.ancestors(record.taxid) else {
+        let Some(ancestors) = self.ancestors.get(record.taxid) else {
             return Ok(None);
         };
         Ok(Some(ReadContribution {
@@ -85,5 +85,32 @@ impl RecordSink<ReadContribution> for CountAccumulator {
     }
     fn finish(&mut self) -> Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bytes::Bytes;
+    use kreport::KrakenReportReader;
+
+    use super::CountReads;
+    use crate::report::read_taxonomy;
+
+    #[test]
+    fn contributions_use_the_last_ancestry_for_duplicate_taxids() {
+        let input = b"100\t4\t0\tR\t1\troot\n100\t4\t0\tD\t2\t  Bacteria\n100\t4\t0\tG\t10\t    First genus\n100\t4\t4\tS\t11\t      Species\n100\t4\t0\tG\t20\t    Last genus\n100\t4\t4\tS\t11\t      Species\n";
+        let report = read_taxonomy(KrakenReportReader::new(input.as_slice())).unwrap();
+        let count = CountReads::new(report.ancestors, None, None);
+        let contribution = count
+            .contribution(Bytes::from_static(b"11\t\t11:2\tACGT\tIIII"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(contribution.ancestors.len(), 3);
+        for taxid in ["2", "20", "11"] {
+            assert!(contribution
+                .ancestors
+                .iter()
+                .any(|ancestor| ancestor.as_ref() == taxid.as_bytes()));
+        }
     }
 }

@@ -20,7 +20,6 @@ pub enum SeqRangeError {
 }
 
 /// Validated, zero-based sequence bounds with an exclusive end.
-/// R's one-based, inclusive coordinates are converted by the inbound adapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SeqRange {
     start: Option<usize>,
@@ -81,7 +80,6 @@ impl SeqRanges {
     }
 
     /// Rejects overlapping extraction ranges.
-    /// Trimming can instead use overlapping ranges as a union.
     pub fn validate_extraction(&self) -> Result<(), SeqRangeError> {
         for pair in self.0.windows(2) {
             if pair[0]

@@ -5,15 +5,14 @@
 #' Spearman correlation between the number of total and unique k-mers across
 #' barcodes. (`padj < 0.05`)
 #'
-#' @param kmer kmer file returned by [`sckmer()`].
+#' @param kmer Path to a Parquet table of k-mer counts per taxon and barcode,
+#'   with columns `taxid`, `taxa`, `kmer_len` and `kmer_n_unique`.
 #' @param method A character string indicating which correlation coefficient is
 #'   to be used for the test. One of "pearson", "kendall", or "spearman", can be
 #'   abbreviated.
 #' @param ... Other arguments passed to [cor.test][stats::cor.test].
 #' @param min_kmer_len An integer, the minimal number of kmer to filter taxa.
-#' SAHMI use `2`.
-#' @param min_cells An integer, the minimal number of cell per taxid. SAHMI use
-#' `4`.
+#' @param min_cells An integer, the minimal number of cell per taxid.
 #' @param p.adjust Pvalue correction method, a character string. Can be
 #'   abbreviated. Details see [p.adjust][stats::p.adjust].
 #' @seealso <https://github.com/sjdlabgroup/SAHMI>

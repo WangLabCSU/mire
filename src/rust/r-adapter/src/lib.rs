@@ -1,4 +1,6 @@
-//! Public R signatures are compatibility contracts and intentionally retain their argument lists.
+//! R bindings for Kraken reports, classification, read refinement and k-mer counting.
+
+// Public R signatures are compatibility contracts and retain their argument lists.
 #![allow(clippy::too_many_arguments)]
 mod actions;
 pub(crate) mod koutput_reads;

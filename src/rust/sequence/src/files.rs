@@ -21,7 +21,7 @@ pub fn read_fastq(
     FastqSource::open(first, second)
 }
 
-/// Extract paired reads by ID, preserving the single-end pass-through policy.
+/// Extract paired reads by ID, or copy all reads from a single-end input.
 ///
 /// # Errors
 /// Returns input, pairing, processing or output errors.

@@ -14,7 +14,8 @@ blsd(
 )
 }
 \arguments{
-\item{kmer}{kmer file returned by \code{\link[=sckmer]{sckmer()}}.}
+\item{kmer}{Path to a Parquet table of k-mer counts per taxon and barcode,
+with columns \code{taxid}, \code{taxa}, \code{kmer_len} and \code{kmer_n_unique}.}
 
 \item{method}{A character string indicating which correlation coefficient is
 to be used for the test. One of "pearson", "kendall", or "spearman", can be
@@ -22,11 +23,9 @@ abbreviated.}
 
 \item{...}{Other arguments passed to \link[stats:cor.test]{cor.test}.}
 
-\item{min_kmer_len}{An integer, the minimal number of kmer to filter taxa.
-SAHMI use \code{2}.}
+\item{min_kmer_len}{An integer, the minimal number of kmer to filter taxa.}
 
-\item{min_cells}{An integer, the minimal number of cell per taxid. SAHMI use
-\code{4}.}
+\item{min_cells}{An integer, the minimal number of cell per taxid.}
 
 \item{p.adjust}{Pvalue correction method, a character string. Can be
 abbreviated. Details see \link[stats:p.adjust]{p.adjust}.}

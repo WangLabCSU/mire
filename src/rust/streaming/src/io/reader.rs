@@ -45,14 +45,11 @@ impl<W: Write> Write for ProgressBarWriter<W> {
     }
 }
 
-/// LineReader: Efficient zero-copy line-based reader using BytesMut.
+/// Read byte lines from an input source.
 ///
-/// This reader avoids unnecessary heap allocations and copying by:
-/// - Reusing a fixed-size buffer (`BytesMut`)
-/// - Using `split_to()` to transfer ownership without copying
-/// - Accumulating "leftover" when a line spans multiple reads
-///
-/// Supports CRLF or LF endings and returns each line as a `BytesMut`.
+/// Supports CRLF and LF endings and returns each line as [`Bytes`].
+// Lines wholly within a buffer use split_to; lines spanning buffers accumulate
+// in leftover before being returned.
 pub struct LineReader<R> {
     reader: R,                  // Underlying reader (e.g., File)
     offset: usize,              // Line count

@@ -2,7 +2,7 @@ use std::error::Error;
 
 use thiserror::Error;
 
-/// Errors acquire operation and record context when they cross a port.
+/// A streaming operation, request or worker failed.
 #[derive(Debug, Error)]
 pub enum WorkflowError {
     #[error("{context}: {source}")]
@@ -31,7 +31,7 @@ impl WorkflowError {
 
 pub type Result<T> = std::result::Result<T, WorkflowError>;
 
-/// Streaming input, independent of file formats and scheduling.
+/// Read records sequentially from an input source.
 pub trait RecordSource {
     type Record: Send;
     fn next_record(&mut self) -> Result<Option<Self::Record>>;
@@ -43,8 +43,7 @@ pub trait RecordSink<T> {
     fn finish(&mut self) -> Result<()>;
 }
 
-/// Executes a use case's transformation while preserving input order.
-/// Scheduling, buffering, and worker lifetime belong to the adapter.
+/// Transform input records and write retained results in input order.
 pub trait RecordExecutor {
     fn execute<S, W, F, T, U, E>(&self, source: S, sink: &mut W, transform: F) -> Result<()>
     where

@@ -2,7 +2,7 @@
 % Please edit documentation in R/seq-range.R
 \name{seq_range}
 \alias{seq_range}
-\title{Create a UMI/Barcode range}
+\title{Define sequence ranges}
 \usage{
 seq_range(start = NULL, end = NULL)
 }
@@ -16,7 +16,7 @@ provided.}
 A \code{mire_seq_range} or \code{mire_seq_ranges} object.
 }
 \description{
-Constructs a \code{mire_seq_range} object representing a UMI/Barcode range with
+Constructs a \code{mire_seq_range} object representing a sequence range with
 optional start and end positions.
 }
 \examples{

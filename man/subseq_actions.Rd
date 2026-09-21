@@ -14,21 +14,16 @@ trim(ranges)
 embed_trim(tag, ranges)
 }
 \arguments{
-\item{tag}{An character label used when embedding sequence content
-into the FASTQ header (used with \code{embed()} and \code{embed_trim()}).
-
-For UMI and barcode actions, the tag will be assigned automatically as
-\code{"UMI"} and \code{"BARCODE"} respectively.
-
-For other types of actions, you must explicitly specify a \code{tag} to ensure
-clarity in the embedded header.}
+\item{tag}{A non-empty character label for sequence content embedded in the
+FASTQ header. Required for \code{embed()} and \code{embed_trim()}, for example \code{"UMI"}
+or \code{"BARCODE"}.}
 
 \item{ranges}{A range or a list of ranges specifying the subsequence(s) to
 process. Must be created using the \code{\link[=seq_range]{seq_range()}} function.}
 }
 \value{
-An annotated \code{mire_seq_range} or \code{mire_seq_ranges} object. object
-with behavior-specific class:
+A sequence action containing the supplied ranges and, for embedding,
+the tag label, with one of these classes:
 \itemize{
 \item \code{mire_embed} — for embedding only
 \item \code{mire_trim} — for trimming only
@@ -36,20 +31,15 @@ with behavior-specific class:
 }
 }
 \description{
-These functions annotate a range or a list of ranges to indicate how
-the specified subsequences (e.g. UMI or barcode) should be handled during
-FASTQ processing.
+These functions define actions for embedding subsequences in FASTQ headers,
+trimming subsequences, or both. Each action applies to a range or list of ranges.
 }
 \details{
 \itemize{
-\item \code{embed()} extracts the sequence and appends it to the read header without
-modifying the sequence.
-\item \code{trim()} removes the specified subsequence from the read but does not store
-it.
-\item \code{embed_trim()} both extracts the subsequence for the header and removes it
-from the read.
+\item \code{embed()} defines an action to copy the subsequence into the read header
+while retaining it in the read.
+\item \code{trim()} defines an action to remove the subsequence and its quality scores.
+\item \code{embed_trim()} defines an action to copy the subsequence into the header
+and remove it and its quality scores from the read.
 }
-
-Each function wraps the input range object in a new class to indicate its
-behavior downstream.
 }

@@ -12,20 +12,41 @@ standard six-column format and the eight-column format produced with
 \code{--report-minimizer-data} are supported.}
 
 \item{taxonomy}{An optional character vector of taxonomic groups to include,
-written as a taxid or \code{"rank__name"}, for example \code{"562"} or
-\code{"D__Bacteria"}. Matching taxa and all their descendants are retained. If
-\code{NULL}, every report row, including the unclassified row, is returned.}
+written as a taxid (\code{"562"}), a full major-rank name (\code{"Genus"}), a
+taxonomic level (\code{"G"}, \code{"G2"}), a level and scientific name
+(\code{"D__Bacteria"}), or a scientific name (\code{"Bacteria"}). Inputs are
+interpreted in that order; full major-rank names are case-sensitive.
+Matching taxa and all their descendants are retained. If
+\code{NULL}, all classified report rows, including the root row, are returned.
+Blank lines and unclassified (\code{U}) rows are skipped.}
 }
 \value{
 A data frame containing the report columns \code{percents},
 \code{total_reads}, \code{reads}, \code{rank}, \code{taxid}, and \code{taxon}.
 Eight-column reports additionally contain \code{minimizer_len} and
 \code{minimizer_n_unique}. The list columns \code{ranks}, \code{taxids}, and
-\code{taxa} contain each row's classified lineage; root and unclassified rows
-are not included as ancestors.
+\code{taxa} contain each row's ancestors only; the current taxon and root
+(\code{R}) are excluded. Intermediate ranks such as \code{R1} are retained.
+If no classified taxa match, the data frame has zero rows.
 }
 \description{
 Parse kraken report file
+}
+\details{
+Taxids in report rows and numeric taxonomy selections must use
+decimal digits without leading zeros, for example \code{"2"} or \code{"562"}.
+A single \code{"0"} denotes unclassified reads. Empty identifiers, signs,
+whitespace, non-ASCII digits and leading zeros such as \code{"02"} or \code{"0002"}
+are rejected. There is no numeric upper bound; for example, \code{"4294967296"}
+is accepted.
+
+A taxonomy selection with no intermediate level matches any depth at the
+same major rank: \code{"G__Genus group"} and \code{"G0__Genus group"} match that name
+at either \code{G} or \code{G2}. An intermediate level must match exactly:
+\code{"G2__Genus group"} matches that name at \code{G2}, but not at \code{G} or \code{G1}.
+Unrecognized levels or incomplete level-and-name conditions, such as
+\code{"G256"}, \code{"X__name"} or \code{"G__"}, are treated as complete scientific names.
+Empty selection labels and digit-only taxids with leading zeros remain invalid.
 }
 \seealso{
 \url{https://github.com/DerrickWood/kraken2/blob/master/docs/MANUAL.markdown}

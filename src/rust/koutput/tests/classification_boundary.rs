@@ -4,7 +4,6 @@ use std::fs;
 use mire_koutput::{
     extract_classifications, join_reads, ExtractClassificationsRequest, JoinReadsRequest, ReadJoin,
 };
-use mire_kreport::{ReportError, ReportRequest, TaxonSelection};
 use mire_streaming::ProcessingOptions;
 use tempfile::tempdir;
 
@@ -33,13 +32,14 @@ fn classification_selection_preserves_original_lines_and_order() {
     .unwrap();
     extract_classifications(
         ExtractClassificationsRequest {
-            report: ReportRequest {
-                path: report.to_str().unwrap(),
-                taxonomy: None,
-            },
+            report: report.to_str().unwrap(),
+            taxonomy: None,
             input: input.to_str().unwrap(),
             output: output.to_str().unwrap(),
-            selection: TaxonSelection::default(),
+            ranks: None,
+            names: None,
+            taxids: None,
+            descendants: false,
             excluded_lca: None,
         },
         options(),
@@ -62,10 +62,8 @@ fn paired_join_uses_sequence_facade_and_preserves_tag_precedence() {
     fs::write(&second, "@a MIRE{UMI:TG}\nTGCA\n+\n5678\n").unwrap();
     join_reads(
         JoinReadsRequest {
-            report: ReportRequest {
-                path: report.to_str().unwrap(),
-                taxonomy: None,
-            },
+            report: report.to_str().unwrap(),
+            taxonomy: None,
             koutput: input.to_str().unwrap(),
             input1: first.to_str().unwrap(),
             input2: Some(second.to_str().unwrap()),
@@ -89,23 +87,59 @@ fn paired_join_uses_sequence_facade_and_preserves_tag_precedence() {
 #[test]
 fn report_errors_remain_structured_at_classification_boundary() {
     let dir = tempdir().unwrap();
-    let report = dir.path().join("empty");
-    fs::write(&report, "").unwrap();
+    let report = dir.path().join("malformed");
+    fs::write(&report, "broken\n").unwrap();
     let result = extract_classifications(
         ExtractClassificationsRequest {
-            report: ReportRequest {
-                path: report.to_str().unwrap(),
-                taxonomy: None,
-            },
+            report: report.to_str().unwrap(),
+            taxonomy: None,
             input: "unused",
             output: "unused",
-            selection: TaxonSelection::default(),
+            ranks: None,
+            names: None,
+            taxids: None,
+            descendants: false,
             excluded_lca: None,
         },
         options(),
     );
-    assert!(matches!(
-        result,
-        Err(mire_koutput::Error::Report(ReportError::Empty(_)))
-    ));
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("line 1"));
+    assert!(error.to_string().contains(report.to_str().unwrap()));
+    let report_error = std::error::Error::source(&error).unwrap();
+    assert_eq!(
+        report_error.source().unwrap().to_string(),
+        "Invalid line with 1 fields; expected 6 or 8"
+    );
+}
+
+#[test]
+fn reports_without_selected_entries_produce_no_classification_lines() {
+    let dir = tempdir().unwrap();
+    let report = dir.path().join("report");
+    let input = dir.path().join("kraken");
+    let output = dir.path().join("selected");
+    fs::write(&input, "C\ta\t2\t4\t2:2\n").unwrap();
+    for (contents, taxonomy) in [
+        ("", None),
+        ("100\t1\t1\tD\t2\tBacteria\n", Some(vec!["999".into()])),
+    ] {
+        fs::write(&report, contents).unwrap();
+        extract_classifications(
+            ExtractClassificationsRequest {
+                report: report.to_str().unwrap(),
+                taxonomy,
+                input: input.to_str().unwrap(),
+                output: output.to_str().unwrap(),
+                ranks: None,
+                names: None,
+                taxids: None,
+                descendants: false,
+                excluded_lca: None,
+            },
+            options(),
+        )
+        .unwrap();
+        assert!(fs::read(&output).unwrap().is_empty());
+    }
 }

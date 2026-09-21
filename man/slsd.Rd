@@ -14,7 +14,8 @@ slsd(
 )
 }
 \arguments{
-\item{kreports}{kreport files returned by \code{\link[=sckmer]{sckmer()}} for all samples.}
+\item{kreports}{Paths to Kraken2 report files for all samples, including
+minimizer counts for each taxon.}
 
 \item{method}{A character string indicating which correlation coefficient is
 to be used for the test. One of "pearson", "kendall", or "spearman", can be
@@ -23,13 +24,12 @@ abbreviated.}
 \item{...}{Other arguments passed to \link[stats:cor.test]{cor.test}.}
 
 \item{min_reads}{An integer, the minimal number of the total reads to filter
-taxa. SAHMI use \code{2}.}
+taxa.}
 
 \item{min_minimizer_n_unique}{An integer, the minimal number of the unique
-number of minimizer to filter taxa. SAHMI use \code{2}.}
+number of minimizer to filter taxa.}
 
-\item{min_samples}{An integer, the minimal number of samples per taxid. SAHMI
-use \code{4}.}
+\item{min_samples}{An integer, the minimal number of samples per taxid.}
 }
 \value{
 A polars \link[polars:DataFrame_class]{DataFrame} of correlation

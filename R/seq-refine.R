@@ -15,13 +15,15 @@
 #' from `fq1`/`fq2`. `umi_action2` is only allowed if `fq2` is provided.
 #' Specify sequence ranges using [`seq_range()`] or combine multiple ranges with
 #' `c()`, this also applies to following all actions. By default, the UMI is
-#' embedded in the header and trimmed from the sequence and quality
+#' embedded in the header with the tag `"UMI"` and trimmed from the sequence
+#' and quality
 #' ([`embed_trim()`]). You can customize the behavior with [`embed()`], or
 #' [`trim()`].
 #' @param barcode_action1,barcode_action2 Sequence action for extracting or
 #' trimming barcodes from `fq1`/`fq2`. `barcode_action2` is only allowed if
-#' `fq2` is provided. By default, barcodes are embedded in the header and
-#' trimmed from both the sequence and quality strings ([`embed_trim()`]).
+#' `fq2` is provided. By default, barcodes are embedded in the header with the
+#' tag `"BARCODE"` and trimmed from both the sequence and quality strings
+#' ([`embed_trim()`]).
 #' Specify ranges as with UMI actions, and customize using [`embed()`], or
 #' [`trim()`].
 #' @param extra_actions1,extra_actions2 Additional sequence actions to apply to

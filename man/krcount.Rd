@@ -15,7 +15,8 @@ krcount(
 )
 }
 \arguments{
-\item{koutreads}{Path to the output file produced by \code{\link[=koutreads]{koutreads()}}.}
+\item{koutreads}{Path to a classified-read file with five tab-separated fields
+per row: taxid, tags, LCA assignments, sequences and quality scores.}
 
 \item{kreport}{Path to the Kraken2 report file.}
 

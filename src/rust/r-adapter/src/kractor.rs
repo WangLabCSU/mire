@@ -1,10 +1,10 @@
-use super::values::strings_arg;
 use bytes::Bytes;
 use extendr_api::prelude::*;
 use mire_koutput::{self as workflows, ExtractClassificationsRequest};
-use mire_kreport::{ReportRequest, TaxonSelection};
 use mire_sequence::FastqPaths;
 use mire_streaming::ProcessingOptions;
+
+use super::values::strings_arg;
 
 #[extendr]
 fn kractor_reads(
@@ -64,18 +64,14 @@ fn kractor_koutput(
         );
     }
     let request = ExtractClassificationsRequest {
-        report: ReportRequest {
-            path: kreport,
-            taxonomy: strings_arg(&taxonomy, "taxonomy")?,
-        },
+        report: kreport,
+        taxonomy: strings_arg(&taxonomy, "taxonomy")?,
         input: koutput,
         output: ofile,
-        selection: TaxonSelection {
-            ranks: strings_arg(&ranks, "ranks")?.map(|values| values.into_iter().collect()),
-            names: strings_arg(&taxa, "taxa")?.map(|values| values.into_iter().collect()),
-            taxids: strings_arg(&taxids, "taxids")?.map(|values| values.into_iter().collect()),
-            descendants,
-        },
+        ranks: strings_arg(&ranks, "ranks")?.map(|values| values.into_iter().collect()),
+        names: strings_arg(&taxa, "taxa")?.map(|values| values.into_iter().collect()),
+        taxids: strings_arg(&taxids, "taxids")?.map(|values| values.into_iter().collect()),
+        descendants,
         excluded_lca: strings_arg(&exclude, "exclude")?
             .map(|values| values.into_iter().map(Bytes::from).collect()),
     };

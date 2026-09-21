@@ -6,7 +6,8 @@
 #' taxonomic rank of interest (by default, genus and species), including all
 #' descendant taxa within those ranks.
 #'
-#' @param koutreads Path to the output file produced by [`koutreads()`].
+#' @param koutreads Path to a classified-read file with five tab-separated fields
+#'   per row: taxid, tags, LCA assignments, sequences and quality scores.
 #' @inheritParams koutreads
 #' @param umi_tag (Optional) A string specifying the tag used to extract unique
 #' molecular identifiers (UMIs) from each read. If `NULL`, all reads are counted

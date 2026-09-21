@@ -4,8 +4,6 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
-    Report(#[from] mire_kreport::ReportError),
-    #[error(transparent)]
     Workflow(#[from] mire_streaming::WorkflowError),
 }
 

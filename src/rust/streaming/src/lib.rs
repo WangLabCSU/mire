@@ -1,6 +1,7 @@
 //! Shared streaming ports and file/execution adapters.
 //!
-//! This crate has no dependency on sequencing, classification, reports, or R.
+//! Read and write records, handle plain or gzip files, and execute transformations
+//! while preserving record order.
 mod config;
 mod execution;
 mod io;

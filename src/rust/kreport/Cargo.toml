@@ -1,5 +1,5 @@
 [package]
-name = "mire-kreport"
+name = "kreport"
 publish = false
 version = "0.1.0"
 edition = "2021"
@@ -9,7 +9,4 @@ rust-version = "1.87"
 bytes = "1.10.1"
 memchr = "2.7.4"
 rustc-hash = "2.1.1"
-thiserror = "1.0.69"
-
-[dev-dependencies]
-tempfile = "3.20.0"
+thiserror.workspace = true

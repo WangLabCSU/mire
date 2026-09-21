@@ -36,7 +36,7 @@ pub struct TagRanges {
 }
 
 impl TagRanges {
-    /// Validates all extraction ranges, including those supplied by Rust callers.
+    /// Validate that extraction ranges for each tag do not overlap.
     ///
     /// # Errors
     /// Returns the tag name and conflicting ranges when a tag contains overlaps.

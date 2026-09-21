@@ -1,6 +1,6 @@
-#' Create a UMI/Barcode range
+#' Define sequence ranges
 #'
-#' Constructs a `mire_seq_range` object representing a UMI/Barcode range with
+#' Constructs a `mire_seq_range` object representing a sequence range with
 #' optional start and end positions.
 #'
 #' @param start Integer. Start position (1-based). Optional if `end` is

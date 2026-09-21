@@ -129,6 +129,30 @@ upgrades, or public API changes unless the task requires them.
   ```
 
 ### Import Grouping
+
+- **Order imports and module declarations in these groups**, with a blank line
+  between nonempty groups:
+  1. Standard library imports: `std`, `core`, `alloc`.
+  2. Third-party crate imports.
+  3. Module declarations: `mod foo;` and `pub mod foo;`.
+  4. Local imports and re-exports: `self`, `super`, `crate`.
+
+- **Use explicit `self::` paths when importing or re-exporting child-module
+  items.** This applies to `use`, `pub use`, and restricted-visibility re-exports
+  such as `pub(crate) use`.
+
+  ```rust
+  use std::path::Path;
+
+  use bytes::Bytes;
+
+  mod parser;
+  mod reader;
+
+  use self::parser::Parser;
+  pub use self::reader::Reader;
+  ```
+
 - **Group imports from same crate** using curly braces:
   ```rust
   // Good: Grouped imports
@@ -203,6 +227,20 @@ cargo clippy
 - Derive common traits: `Debug`, `Clone`, `PartialEq` where applicable
 
 ### Documentation
+- Describe the **domain model, domain meaning, and observable behavior** in API
+  documentation and README files, using the project's ubiquitous language.
+- **Document each subject on its own terms.** All documentation must describe
+  the subject's own responsibilities, domain meaning, and public contract.
+  Do not shape its documentation around another caller's requirements, behavior,
+  or implementation, or add caller-specific comparisons and exclusions.
+  Describe a caller's orchestration in that caller's own documentation.
+- Put **implementation details in ordinary code comments** (`//` or `/* */`),
+  not documentation comments (`///` or `//!`). Internal storage choices and
+  control flow belong beside the implementation.
+- Explain public inputs and constraints through domain concepts and concrete
+  examples, such as "no intermediate level," instead of restating numeric checks.
+- Keep documentation, examples, and test names consistent with the current
+  domain model whenever it changes.
 - Use `///` for public API documentation
 - Include examples in doc comments
 - Document panics and errors

@@ -1,4 +1,4 @@
-/// A FASTQ record whose fields are validated by the sequence reader.
+/// A sequencing read's FASTQ identifier, description, bases and quality scores.
 #[derive(Debug)]
 pub struct FastqRecord<T> {
     pub(crate) id: T,

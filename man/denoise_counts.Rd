@@ -29,14 +29,11 @@ denoise_counts(
 )
 }
 \arguments{
-\item{kreports}{A character vector of paths to Kraken2 report files,
-typically output by \code{\link[=sckmer]{sckmer()}}, one per sample.}
+\item{kreports}{A character vector of paths to Kraken2 report files, one per sample.}
 
-\item{kmers}{A character vector of paths to k-mer quantification files,
-typically output by \code{\link[=sckmer]{sckmer()}}, one per sample.}
+\item{kmers}{A character vector of paths to Parquet k-mer count tables, one per sample.}
 
-\item{umis}{A character vector of paths to UMI quantification files,
-typically output by \code{\link[=sckmer]{sckmer()}}, one per sample.}
+\item{umis}{A character vector of paths to Parquet UMI count tables, one per sample.}
 
 \item{samples}{A character of sample identifier for each element in \code{umis}.
 If not provided, the names of the \code{umis} vector will be used.}
@@ -50,19 +47,16 @@ to calculate.}
 \item{alpha}{Level of significance.}
 
 \item{min_reads}{An integer, the minimal number of the total reads to filter
-taxa. SAHMI use \code{2}.}
+taxa.}
 
 \item{min_minimizer_n_unique}{An integer, the minimal number of the unique
-number of minimizer to filter taxa. SAHMI use \code{2}.}
+number of minimizer to filter taxa.}
 
-\item{min_samples}{An integer, the minimal number of samples per taxid. SAHMI
-use \code{4}.}
+\item{min_samples}{An integer, the minimal number of samples per taxid.}
 
-\item{min_kmer_len}{An integer, the minimal number of kmer to filter taxa.
-SAHMI use \code{2}.}
+\item{min_kmer_len}{An integer, the minimal number of kmer to filter taxa.}
 
-\item{min_cells}{An integer, the minimal number of cell per taxid. SAHMI use
-\code{4}.}
+\item{min_cells}{An integer, the minimal number of cell per taxid.}
 
 \item{cor_threshold}{Minimum correlation coefficient required in sample-level
 filtering. Default is \code{0}.}

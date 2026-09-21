@@ -1,39 +1,44 @@
-use std::{io, path::PathBuf};
+use std::io;
 
 use thiserror::Error;
 
-use crate::{ParseError, TaxonomyError};
+use crate::domain::ParseError;
 
-/// Structured failures at the report boundary, retaining file and line context.
+/// A report could not be read or parsed.
+///
+/// The message identifies the report line. Use `std::error::Error::source()` to
+/// inspect the underlying cause.
+///
+/// ```
+/// use kreport::{load_kreport, Error};
+/// match load_kreport(b"broken\n".as_slice(), Default::default()) {
+///     Err(Error::Parse { line, source }) => {
+///         assert_eq!(line, 1);
+///         eprintln!("{source}");
+///     }
+///     Err(error) => return Err(error),
+///     Ok(report) => println!("{} entries", report.len()),
+/// }
+/// # Ok::<(), Error>(())
+/// ```
 #[derive(Debug, Error)]
-pub enum ReportError {
-    #[error("open '{}': {source}", .path.display())]
-    Open {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-    #[error("read '{}' at line {line}: {source}", .path.display())]
+pub enum Error {
+    /// Reading the report failed.
+    #[error("Failed to read Kraken report at line {line}: {source}")]
     Read {
-        path: PathBuf,
+        /// The report line where reading failed.
         line: usize,
+        /// The underlying input failure.
         #[source]
         source: io::Error,
     },
-    #[error("line {line} of kraken report '{}': {source}", .path.display())]
-    InvalidLine {
-        path: PathBuf,
+    /// Parsing a report entry failed.
+    #[error("Failed to parse Kraken report at line {line}: {source}")]
+    Parse {
+        /// The report line containing the entry.
         line: usize,
+        /// Details of the entry parsing failure.
         #[source]
         source: ParseError,
     },
-    #[error("select taxonomy: {0}")]
-    Taxonomy(#[from] TaxonomyError),
-    #[error(
-        "No entries found in kreport file: '{0}'. Please ensure it is not empty or malformed."
-    )]
-    Empty(String),
 }
-
-/// The result of reading or selecting a Kraken report.
-pub type Result<T> = std::result::Result<T, ReportError>;

@@ -1,8 +1,7 @@
 #' Kraken2 Output Processing for FASTQ Files
 #'
-#' This function processes Kraken2 output and associated FASTQ files, extracting
-#' relevant taxonomic information and preparing them for further downstream
-#' analysis.
+#' This function joins Kraken2 classifications with FASTQ reads and extracts
+#' taxonomic assignments, tags, sequences and quality scores.
 #'
 #' @param kreport Path to the Kraken2 report file.
 #' @param koutput Path to the Kraken2 output file.
@@ -21,15 +20,15 @@
 #'   from the first/second read in single-end/paired-end data. If `NULL`, no
 #'   additional tag extraction occurs for the first/second read. These ranges
 #'   must be created by the `tag()` function, or be a named [`seq_range()`]
-#'   object (in which case it will be automatically wrapped by `tag()`). Note
-#'   that the tag embedded by [`seq_refine()`] in the description header will
-#'   always be extracted.
+#'   object (in which case it will be automatically wrapped by `tag()`). Tags
+#'   in MIRE header annotations, such as `MIRE{UMI:AC:BARCODE:GT}`, are also
+#'   extracted when no tag ranges are supplied.
 #' @param ofile A character string. Path to the output file that will store the
 #'   matched reads extracted based on Kraken2 classification. The output is
 #'   compressed if the extension is `.gz`. This file contains only reads whose
 #'   taxonomic assignments match the filtering criteria, such as `taxonomy`
-#'   inclusion and `exclude` filters. Useful for downstream analysis like
-#'   quantification of taxon-specific reads.
+#'   inclusion and `exclude` filters. Each tab-separated row contains the taxid,
+#'   tags, LCA assignments, sequences and quality scores, in that order.
 #' @param taxonomy A character vector. The set of taxonomic groups to include
 #'   (default: `c("D__Bacteria", "D__Fungi", "D__Viruses")`). This defines the
 #'   global taxa to consider. Only the descendants within these groups will be

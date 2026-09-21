@@ -10,7 +10,7 @@ name = "mire"
 crate-type = ["staticlib"]
 
 [dependencies]
-mire-kreport = { path = "../kreport" }
+kreport = { path = "../kreport" }
 mire-sequence = { path = "../sequence" }
 mire-koutput = { path = "../koutput" }
 mire-krcount = { path = "../krcount" }

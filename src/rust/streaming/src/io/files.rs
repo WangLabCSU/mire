@@ -51,7 +51,7 @@ fn progress(prefix: &'static str, length: Option<u64>) -> ProgressBar {
     bar
 }
 
-/// Output buffering and compression are independent of biological records.
+/// Write bytes to a plain or gzip file in buffered chunks.
 /// Holds at most one configured chunk plus the largest serialized record.
 pub struct ChunkWriter {
     writer: Box<dyn Write>,

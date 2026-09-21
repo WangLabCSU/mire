@@ -8,7 +8,7 @@ pub struct ProcessingOptions {
     pub batch_size: usize,
     /// Output buffer target; a single record may exceed it.
     pub chunk_bytes: usize,
-    /// Queued batches; `None` is unbounded, `Some(0)` uses rendezvous channels.
+    /// Queued batches; `None` is unbounded, `Some(0)` allows no queued batches.
     pub nqueue: Option<usize>,
     /// Worker count, with a minimum of one.
     pub threads: usize,

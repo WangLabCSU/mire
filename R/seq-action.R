@@ -1,33 +1,23 @@
 #' Define sequence range behavior: embed, trim, or both
 #'
-#' These functions annotate a range or a list of ranges to indicate how
-#' the specified subsequences (e.g. UMI or barcode) should be handled during
-#' FASTQ processing.
+#' These functions define actions for embedding subsequences in FASTQ headers,
+#' trimming subsequences, or both. Each action applies to a range or list of ranges.
 #'
-#' - `embed()` extracts the sequence and appends it to the read header without
-#'   modifying the sequence.
-#' - `trim()` removes the specified subsequence from the read but does not store
-#'   it.
-#' - `embed_trim()` both extracts the subsequence for the header and removes it
-#'   from the read.
+#' - `embed()` defines an action to copy the subsequence into the read header
+#'   while retaining it in the read.
+#' - `trim()` defines an action to remove the subsequence and its quality scores.
+#' - `embed_trim()` defines an action to copy the subsequence into the header
+#'   and remove it and its quality scores from the read.
 #'
-#' Each function wraps the input range object in a new class to indicate its
-#' behavior downstream.
-#'
-#' @param tag An character label used when embedding sequence content
-#'   into the FASTQ header (used with `embed()` and `embed_trim()`).
-#'
-#'   For UMI and barcode actions, the tag will be assigned automatically as
-#'   `"UMI"` and `"BARCODE"` respectively.
-#'
-#'   For other types of actions, you must explicitly specify a `tag` to ensure
-#'   clarity in the embedded header.
+#' @param tag A non-empty character label for sequence content embedded in the
+#'   FASTQ header. Required for `embed()` and `embed_trim()`, for example `"UMI"`
+#'   or `"BARCODE"`.
 #'
 #' @param ranges A range or a list of ranges specifying the subsequence(s) to
 #' process. Must be created using the [`seq_range()`] function.
 #'
-#' @return An annotated `mire_seq_range` or `mire_seq_ranges` object. object
-#' with behavior-specific class:
+#' @return A sequence action containing the supplied ranges and, for embedding,
+#' the tag label, with one of these classes:
 #' \itemize{
 #'   \item `mire_embed` — for embedding only
 #'   \item `mire_trim` — for trimming only

@@ -8,6 +8,7 @@ use mire_sequence::{SeqRange, SeqRanges, TagRanges};
 
 /// Extract sequence ranges from an R object.
 /// The R object must inherit from either `mire_seq_range` or `mire_seq_ranges`.
+/// Convert one-based, inclusive coordinates to zero-based, end-exclusive bounds.
 /// Returns an error if the object is not structured correctly or if the ranges are malformed.
 pub(crate) fn parse_ranges(value: &Robj) -> Result<SeqRanges> {
     if value.inherits("mire_seq_range") {
@@ -76,8 +77,7 @@ pub(crate) fn parse_range(value: &Robj) -> Result<SeqRange> {
     Ok(SeqRange::build(start_usize, end_usize)?)
 }
 
-/// Extracts a tag name from an R object (Robj) used in action annotation.
-/// This is used in R interface bindings for embedding.
+/// Extract a tag name from an R object's `tag` attribute.
 ///
 /// # Errors
 /// Returns an error if the `"tag"` attribute is missing or not a string.

@@ -1,6 +1,7 @@
 //! Kraken classifications and joining classifications to reads.
-//! Use the requests and file operations exported here. Parsers, filters and
-//! workflow coordination are private to this member.
+//!
+//! Select Kraken output lines by taxon, extract reads by ID, and join
+//! classifications with sequences, qualities and tags.
 //!
 //! ```compile_fail
 //! use mire_koutput::domain::output::Classification;
@@ -10,11 +11,13 @@ mod domain;
 mod error;
 mod files;
 mod output;
-pub use domain::joined::ReadJoin;
-pub use error::{Error, Result};
-pub use files::{
+mod report;
+
+pub use self::domain::joined::ReadJoin;
+pub use self::error::{Error, Result};
+pub use self::files::{
     extract_classifications, extract_reads, join_reads, ExtractClassificationsRequest,
     JoinReadsRequest,
 };
 
-pub(crate) use domain::joined::ClassifiedRead;
+pub(crate) use self::domain::joined::ClassifiedRead;

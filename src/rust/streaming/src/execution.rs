@@ -10,10 +10,10 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use crate::ports::{RecordExecutor, RecordSink, RecordSource, Result, WorkflowError};
 
+/// Process batches concurrently and write their results in input order.
+///
 /// A bounded run holds at most `queue_batches + threads + 1` batches across
-/// reading, processing, and ordered output. Credits are returned only after
-/// writing: a slow earlier batch cannot cause unbounded result reordering.
-/// `None` preserves the public API's explicitly unbounded queue behavior.
+/// reading, processing, and ordered output. `None` allows an unbounded queue.
 pub struct OrderedExecutor {
     batch_size: usize,
     queue_batches: Option<usize>,
@@ -59,6 +59,8 @@ impl RecordExecutor for OrderedExecutor {
     {
         let (input_tx, input_rx) = channel(self.queue_batches);
         let (output_tx, output_rx) = channel(self.queue_batches);
+        // Credits are returned only after writing, so a slow earlier batch
+        // cannot cause unbounded result reordering.
         let credits = self.queue_batches.map(|capacity| {
             let capacity = capacity
                 .saturating_add(self.pool.current_num_threads())

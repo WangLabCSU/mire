@@ -1,9 +1,9 @@
-use super::{sequence::robj_to_tag_ranges, values::strings_arg};
 use bytes::Bytes;
 use extendr_api::prelude::*;
 use mire_koutput::{self as workflows, JoinReadsRequest, ReadJoin};
-use mire_kreport::ReportRequest;
 use mire_streaming::ProcessingOptions;
+
+use super::{sequence::robj_to_tag_ranges, values::strings_arg};
 
 #[extendr]
 fn koutput_reads(
@@ -27,10 +27,8 @@ fn koutput_reads(
     threads: usize,
 ) -> std::result::Result<(), String> {
     let request = JoinReadsRequest {
-        report: ReportRequest {
-            path: kreport,
-            taxonomy: strings_arg(&taxonomy, "taxonomy")?,
-        },
+        report: kreport,
+        taxonomy: strings_arg(&taxonomy, "taxonomy")?,
         koutput,
         input1: fq1,
         input2: fq2,

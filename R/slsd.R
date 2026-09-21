@@ -8,17 +8,17 @@
 #' `cor(minimizer_len, total_reads)` and `cor(total_reads, minimizer_n_unique)`.
 #' (`r1>0 & r2>0 & r3>0 & p1<0.05 & p2<0.05 & p3<0.05`).
 #'
-#' @param kreports kreport files returned by [`sckmer()`] for all samples.
+#' @param kreports Paths to Kraken2 report files for all samples, including
+#'   minimizer counts for each taxon.
 #' @param method A character string indicating which correlation coefficient is
 #'   to be used for the test. One of "pearson", "kendall", or "spearman", can be
 #'   abbreviated.
 #' @param ... Other arguments passed to [cor.test][stats::cor.test].
 #' @param min_reads An integer, the minimal number of the total reads to filter
-#' taxa. SAHMI use `2`.
+#' taxa.
 #' @param min_minimizer_n_unique An integer, the minimal number of the unique
-#' number of minimizer to filter taxa. SAHMI use `2`.
-#' @param min_samples An integer, the minimal number of samples per taxid. SAHMI
-#' use `4`.
+#' number of minimizer to filter taxa.
+#' @param min_samples An integer, the minimal number of samples per taxid.
 #' @return A polars [DataFrame][polars::DataFrame_class] of correlation
 #'   coefficient and pvalue for `cor(minimizer_len, minimizer_n_unique)` (r1 and
 #'   p1), `cor(minimizer_len, total_reads)` (r2 and p2) and `cor(total_reads,

@@ -152,7 +152,7 @@ impl SubseqPairedActions {
     /// - If both sides have embedding, tags are merged by key. If the same tag exists in both,
     ///   the sequences are concatenated in read1-first, read2-second order.
     ///
-    /// Tags are serialized using `make_description()` and applied to both reads' description fields.
+    /// Both reads receive the combined tags in their FASTQ descriptions.
     fn embedded_labels(
         &self,
         record1: &mut FastqRecord<Bytes>,
@@ -212,7 +212,6 @@ impl SubseqActionsBuilder {
     }
 
     /// Adds a compound action to the builder.
-    /// Dispatches to `embed`, `trim`, or both depending on action variant.
     pub fn add_action(&mut self, action: SeqAction, ranges: SeqRanges) -> Result<()> {
         match action {
             SeqAction::Embed(tag) => {
