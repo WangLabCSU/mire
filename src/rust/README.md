@@ -50,7 +50,7 @@ use kreport::{load_kreport, KrakenReport, TaxonSpec};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let filters = [TaxonSpec::parse("D__Bacteria".into())?].into_iter().collect();
     let report: KrakenReport = load_kreport(File::open("sample.kreport")?, filters)?;
-    for entry in report.entries() {
+    for entry in &report {
         println!("{}: {}", entry.taxon().taxid(), entry.taxon().term());
     }
     Ok(())
@@ -94,10 +94,13 @@ entry must have a known parent. For example, a taxon followed directly by its
 grandchild is rejected if the intervening parent is missing. A second unindented
 classified entry is also rejected. The error identifies the report line.
 
-Use `report.entries()` to inspect entries, or `report.taxids()`, `report.ranks()`
-and `report.taxa()` to iterate identifiers, taxonomic levels and names.
-Use `report.into_entries()` and `entry.into_parts()` when you need owned values,
-including counts and lineages.
+Use `report.iter()` or `for entry in &report` to borrow entries in report order.
+Access identifiers, taxonomic levels and names through `entry.taxon()`.
+Use `report.iter_mut()` or `for entry in &mut report` to borrow entries mutably
+and replace them with updated report entries.
+Use `report.into_iter()` or `for entry in report` to take ownership of the entries
+in report order. Use `entry.into_parts()` for owned counts, taxon and lineage
+values.
 
 ### Selecting taxa
 

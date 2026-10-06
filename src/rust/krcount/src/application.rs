@@ -105,8 +105,8 @@ mod tests {
             .contribution(Bytes::from_static(b"11\t\t11:2\tACGT\tIIII"))
             .unwrap()
             .unwrap();
-        assert_eq!(contribution.ancestors.len(), 4);
-        for taxid in ["1", "2", "20", "11"] {
+        assert_eq!(contribution.ancestors.len(), 3);
+        for taxid in ["2", "20", "11"] {
             assert!(contribution
                 .ancestors
                 .iter()

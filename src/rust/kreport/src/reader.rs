@@ -43,7 +43,8 @@ use crate::error::Error;
 /// use kreport::load_kreport;
 /// let input = b"100\t2\t2\tD\t2\tBacteria\n";
 /// let report = load_kreport(input.as_slice(), Default::default())?;
-/// assert_eq!(report.taxa().collect::<Vec<_>>(), ["Bacteria"]);
+/// let names: Vec<_> = report.iter().map(|entry| entry.taxon().term()).collect();
+/// assert_eq!(names, ["Bacteria"]);
 /// # Ok::<(), kreport::Error>(())
 /// ```
 pub fn load_kreport<R: Read>(
@@ -553,7 +554,6 @@ mod tests {
             for (labels, taxids) in selections {
                 let specs = filters(labels);
                 let expected: Vec<_> = report
-                    .entries()
                     .iter()
                     .filter(|entry| taxids.contains(&entry.taxon().taxid().as_str()))
                     .cloned()
@@ -561,7 +561,8 @@ mod tests {
                 assert_eq!(
                     load_kreport(input.as_bytes(), specs.clone())
                         .unwrap()
-                        .into_entries(),
+                        .into_iter()
+                        .collect::<Vec<_>>(),
                     expected,
                     "{labels:?}, minimizers {minimizers}"
                 );
@@ -771,7 +772,8 @@ mod tests {
         let input = b"100\t4\t0\tD\t2\tBacteria\r\n100\t4\t4\tS\t11\t  Species\r\n";
         let expected = load_kreport(input.as_slice(), filters(&["Bacteria"]))
             .unwrap()
-            .into_entries();
+            .into_iter()
+            .collect::<Vec<_>>();
         for capacity in 1..=input.len() {
             let mut reader = KrakenReportReader::with_capacity_and_filters(
                 capacity,
@@ -930,8 +932,8 @@ mod tests {
             let report = load_kreport(input.as_bytes(), filters(&["131567"])).unwrap();
             assert_eq!(
                 report
-                    .taxids()
-                    .map(|taxid| taxid.as_str())
+                    .iter()
+                    .map(|entry| entry.taxon().taxid().as_str())
                     .collect::<Vec<_>>(),
                 ["131567"]
             );
@@ -974,8 +976,9 @@ mod tests {
                         .unwrap(),
                 )
                 .unwrap();
-                assert_eq!(report.entries()[0].taxon().taxid().as_str(), taxid);
-                assert_eq!(report.entries()[0].taxon().level().to_string(), "G2");
+                let entry = report.iter().next().unwrap();
+                assert_eq!(entry.taxon().taxid().as_str(), taxid);
+                assert_eq!(entry.taxon().level().to_string(), "G2");
             }
         }
     }
@@ -985,7 +988,6 @@ mod tests {
         let input = b" \r\n100\t4\t0\tR\t1\troot\r\n100\t4\t2\t30\t7\tD\t2\t  Bacteria";
         let rows = load_kreport(input.as_slice(), HashSet::default())
             .unwrap()
-            .into_entries()
             .into_iter()
             .map(|entry| entry.into_parts())
             .collect::<Vec<_>>();
@@ -1003,7 +1005,6 @@ mod tests {
         let input = b"100\t4\t0\tD\t2\tBacteria\r";
         let rows = load_kreport(input.as_slice(), HashSet::default())
             .unwrap()
-            .into_entries()
             .into_iter()
             .map(|entry| entry.into_parts())
             .collect::<Vec<_>>();
@@ -1015,7 +1016,6 @@ mod tests {
         let input = b"\n20\t2\t2\tU\t0\tunclassified\n100\t10\t0\tR\t1\troot\n100\t10\t0\tD\t2\t  Bacteria\n100\t10\t0\tG\t10\t    Genus A\n50\t5\t5\tS\t11\t      Species A\n \t \n50\t5\t5\tS\t12\t      Species B\n100\t10\t0\tG\t20\t    Genus B\n100\t10\t10\tS\t21\t      Species C\n100\t10\t0\tD\t3\t  Archaea\n100\t10\t10\tS\t31\t    Species D\n";
         let rows = load_kreport(input.as_slice(), HashSet::default())
             .unwrap()
-            .into_entries()
             .into_iter()
             .map(|entry| entry.into_parts())
             .collect::<Vec<_>>();

@@ -18,8 +18,8 @@
 //!
 //! let filters = [TaxonSpec::parse("D__Bacteria".into())?].into_iter().collect();
 //! let report: KrakenReport = load_kreport(File::open("sample.kreport")?, filters)?;
-//! for taxon in report.taxa() {
-//!     println!("{taxon}");
+//! for entry in &report {
+//!     println!("{}", entry.taxon().term());
 //! }
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```

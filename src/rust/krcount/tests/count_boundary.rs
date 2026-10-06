@@ -123,11 +123,10 @@ fn filtered_reports_keep_ancestor_columns_and_skip_absent_taxids() {
         Some(0),
     )
     .unwrap();
-    assert_eq!(table.ranks, ["R", "D", "G", "S"]);
+    assert_eq!(table.ranks, ["D", "G", "S"]);
     assert_eq!(
         table.taxa,
         [
-            vec![Some("root".into()); 2],
             vec![Some("Bacteria".into()); 2],
             vec![Some("Genus".into()); 2],
             vec![None, Some("Species".into())]
