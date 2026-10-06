@@ -23,6 +23,8 @@ pub struct Taxid(String);
 
 impl Taxid {
     pub(crate) fn new(value: String) -> Result<Self, TaxidParseError> {
+        // Validate the decimal text directly so the identifier's size is not
+        // limited by a machine integer. Reject empty input before checking digits.
         if value.is_empty() {
             return Err(TaxidParseError::Empty);
         }

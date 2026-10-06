@@ -80,9 +80,19 @@ entries with `reader.entries().collect::<Result<Vec<_>, _>>()?`.
 
 Both support six- and eight-column reports and preserve report order. Blank and
 unclassified rows are skipped. An entry's `lineage()` contains its taxon's ancestors,
-excluding the taxon itself and root taxa. Ancestors remain in the lineage even
-when they are not selected. Root entries are included in an unrestricted report
-or when a condition matches the root.
+excluding the taxon itself and ancestors whose major rank is root, such as `R`,
+`R1` and `R2`. Other ancestors, including intermediate levels such as `G2`, remain
+in the lineage even when they are not selected. Taxid `1` selects the root entry
+alone; a taxid identifying an `R1` or `R2` entry likewise selects that entry alone.
+Use an empty set of conditions to read all classified entries.
+
+Unclassified rows must also contain valid report fields; malformed rows produce
+an error with the report line.
+
+A report starts with an unindented classified entry. Each subsequent classified
+entry must have a known parent. For example, a taxon followed directly by its
+grandchild is rejected if the intervening parent is missing. A second unindented
+classified entry is also rejected. The error identifies the report line.
 
 Use `report.entries()` to inspect entries, or `report.taxids()`, `report.ranks()`
 and `report.taxa()` to iterate identifiers, taxonomic levels and names.
@@ -103,7 +113,8 @@ Use `TaxonSpec::parse` or `try_into()` to create conditions for either service:
 | `G__Genus group` | That name at genus or an intermediate level below genus |
 | `G2__Genus group` | That name exactly two levels below genus |
 
-Report selection includes taxa matching any condition and their descendants.
+Report selection includes entries whose taxon or an ancestor in their lineage
+matches any condition.
 Full rank names are case-sensitive. `Genus` selects a rank; use `G__Genus` to
 select taxa named `Genus` at that rank or its intermediate levels.
 Unrecognized levels and incomplete conditions, such as `G256`, `X__name` and

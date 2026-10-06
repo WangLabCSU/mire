@@ -75,7 +75,8 @@ pub struct KrakenReportEntryParts {
     pub distinct_minimizer_count: Option<usize>,
     /// The classified taxon.
     pub taxon: Taxon,
-    /// Ancestors in report order, excluding this taxon and root taxa.
+    /// Ancestors in report order, excluding this taxon and ancestors whose major
+    /// rank is root, such as `R`, `R1` and `R2`.
     pub lineage: Vec<Taxon>,
     /// Depth in the reported taxonomic hierarchy.
     pub hierarchy_depth: usize,
@@ -121,7 +122,8 @@ impl KrakenReportEntry {
         &self.taxon
     }
 
-    /// Ancestors only, excluding the current taxon and the root rank.
+    /// Ancestors in report order, excluding the current taxon and ancestors whose
+    /// major rank is root, such as `R`, `R1` and `R2`.
     pub fn lineage(&self) -> &[Taxon] {
         &self.lineage
     }

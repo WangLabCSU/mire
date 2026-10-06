@@ -1,17 +1,21 @@
-// Read Kraken report entries and select taxa with their descendants.
+// Coordinate report input, entry parsing and selection in report order.
 use std::io::{self, Read};
 
 use bytes::{Bytes, BytesMut};
 use memchr::memchr;
 use rustc_hash::FxHashSet as HashSet;
 
-use crate::domain::{KrakenReport, KrakenReportEntry, KrakenReportParser, LineageState, TaxonSpec};
+use crate::domain::{
+    EntrySpec, EntrySpecScope, KrakenReport, KrakenReportEntry, KrakenReportParser, LineagePath,
+    TaxonSpec,
+};
 use crate::error::Error;
 
 /// Read a six- or eight-column report from an input source.
 ///
-/// An empty set of conditions includes all classified taxa. Conditions select
-/// matching taxa and their descendants. Supported forms include taxids (`562`),
+/// An empty set of conditions includes all classified taxa. An entry is selected
+/// when its taxon or an ancestor in its lineage matches a condition.
+/// Supported forms include taxids (`562`),
 /// full rank names (`Genus`), taxonomic levels (`G2`), scientific names (`Bacteria`)
 /// and level-and-name conditions (`G__Genus group`). Rank names are case-sensitive.
 /// `G__Genus group` includes that name at genus or an intermediate level below
@@ -23,11 +27,16 @@ use crate::error::Error;
 /// as scientific names.
 ///
 /// Blank and unclassified rows are skipped. Root entries are included when
-/// selected, but never appear in ancestor lineages. No matching entries, including
-/// an empty input, produce an empty report; use `report.is_empty()` to check.
+/// selected; ancestor lineages omit the current taxon and ancestors whose major
+/// rank is root, such as `R`, `R1` and `R2`.
+/// For example, taxid `1` selects the root entry alone. Use no conditions to read
+/// every classified entry. No matching entries, including an empty input, produce
+/// an empty report; use `report.is_empty()` to check.
 ///
 /// # Errors
-/// Returns an [`Error`] with the report line if reading or parsing an entry fails.
+/// Returns an [`Error`] with the report line if reading or parsing an entry fails,
+/// including malformed unclassified rows.
+/// A missing parent or a second top-level entry is a parsing error.
 ///
 /// # Examples
 /// ```
@@ -48,7 +57,9 @@ pub fn load_kreport<R: Read>(
 
 /// Read Kraken report entries with their ancestor lineages.
 ///
-/// Taxonomy conditions retain matching taxa and their descendants in report order.
+/// Conditions match an entry's taxon or an ancestor in its lineage.
+/// Ancestor lineages omit the current taxon and ancestors whose major rank is
+/// root, such as `R`, `R1` and `R2`.
 /// With no conditions, all classified entries are returned, including root entries.
 ///
 /// ```
@@ -61,9 +72,10 @@ pub fn load_kreport<R: Read>(
 /// ```
 pub struct KrakenReportReader<R> {
     reader: LineReader<R>,
-    // Preserve this report's ancestry between calls to the parser.
-    state: LineageState,
-    filters: HashSet<TaxonSpec>,
+    parser: KrakenReportParser,
+    // Preserve the full taxonomic path between report lines.
+    path: LineagePath,
+    entry_spec: EntrySpec,
 }
 
 impl<R: Read> KrakenReportReader<R> {
@@ -79,7 +91,7 @@ impl<R: Read> KrakenReportReader<R> {
         Self::with_capacity_and_filters(capacity, HashSet::default(), reader)
     }
 
-    /// Create a reader for taxa matching any condition and their descendants.
+    /// Create a reader selecting entries by their taxon or ancestor lineage.
     /// An empty set of conditions leaves the report unrestricted.
     ///
     /// ```
@@ -99,18 +111,18 @@ impl<R: Read> KrakenReportReader<R> {
         Self::with_capacity_and_filters(Self::BUFFER_SIZE, filters, reader)
     }
 
-    /// Select matching taxa and descendants with the requested input capacity in bytes.
+    /// Select entries by their taxon or ancestor lineage with the requested input capacity in bytes.
     /// An empty set of conditions leaves the report unrestricted.
     pub fn with_capacity_and_filters(
         capacity: usize,
-        filters: HashSet<TaxonSpec>,
+        taxon_specs: HashSet<TaxonSpec>,
         reader: R,
     ) -> Self {
         Self {
-            // A zero-byte read buffer would incorrectly make nonempty input look exhausted.
-            reader: LineReader::with_capacity(capacity.max(1), reader),
-            state: LineageState::new(),
-            filters,
+            reader: LineReader::with_capacity(capacity, reader),
+            parser: KrakenReportParser::new(),
+            path: LineagePath::with_capacity(10),
+            entry_spec: EntrySpec::new(taxon_specs, EntrySpecScope::Lineage),
         }
     }
 
@@ -119,39 +131,39 @@ impl<R: Read> KrakenReportReader<R> {
         self.reader.offset()
     }
 
-    /// Read the next selected entry with its complete ancestor lineage.
-    /// Blank and unclassified rows are skipped. Root entries never become ancestors.
+    /// Read the next selected entry with its ancestor lineage.
+    /// Blank and unclassified rows are skipped. Ancestor lineages omit the current
+    /// taxon and ancestors whose major rank is root, such as `R`, `R1` and `R2`.
     /// `Ok(None)` means no selected entries remain.
     ///
     /// # Errors
     ///
     /// Returns an [`Error`] if reading or parsing an entry fails. Taxonomy
-    /// conditions do not suppress errors in unselected rows.
+    /// conditions do not suppress errors in unselected rows. Malformed
+    /// unclassified rows also produce errors.
+    /// A missing parent or a second top-level entry is a parsing error.
     pub fn read_entry(&mut self) -> Result<Option<KrakenReportEntry>, Error> {
         while let Some(line) = self.reader.read_line() {
+            // offset counts delivered lines; a read failure belongs to the next
+            // physical line, including when part of that line is already buffered.
             let line = line.map_err(|source| Error::Read {
                 line: self.offset() + 1,
                 source,
             })?;
-            let Some(entry) =
-                KrakenReportParser::parse_entry(&line, &mut self.state).map_err(|source| {
-                    Error::Parse {
-                        line: self.offset(),
-                        source,
-                    }
+            // Parse every row before selection so unselected ancestors still
+            // advance the path and malformed rows still report their errors.
+            let Some(entry) = self
+                .parser
+                .parse_entry(&line, &mut self.path)
+                .map_err(|source| Error::Parse {
+                    // The line has been delivered, so offset now identifies it.
+                    line: self.offset(),
+                    source,
                 })?
             else {
                 continue;
             };
-            if !self.filters.is_empty()
-                && !self.filters.iter().any(|spec| {
-                    spec.is_satisfied_by(entry.taxon())
-                        || entry
-                            .lineage()
-                            .iter()
-                            .any(|taxon| spec.is_satisfied_by(taxon))
-                })
-            {
+            if !self.entry_spec.is_satisfied_by(&entry) {
                 continue;
             }
             return Ok(Some(entry));
@@ -160,7 +172,8 @@ impl<R: Read> KrakenReportReader<R> {
     }
 
     /// Iterate over the remaining selected entries in report order.
-    /// Each entry includes its complete ancestor lineage.
+    /// Ancestor lineages omit the current taxon and ancestors whose major rank is
+    /// root, such as `R`, `R1` and `R2`.
     ///
     /// # Errors
     ///
@@ -191,18 +204,23 @@ impl<R: Read> Iterator for Entries<'_, R> {
     type Item = Result<KrakenReportEntry, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // Only Ok(None) ends iteration; an error remains an item, allowing the
+        // caller to request the following entry after a parsing failure.
         self.reader.read_entry().transpose()
     }
 }
 
-// Reads LF/CRLF lines, using BytesMut::split_to within a buffer and accumulating
-// leftover bytes when a line spans multiple reads.
+// Split buffered input into LF/CRLF lines. Keep unfinished line bytes across
+// reads; remove terminators only once the complete line has been assembled.
 struct LineReader<R> {
-    reader: R,                  // Underlying reader (e.g., File)
-    offset: usize,              // Line count
-    buffer_size: usize,         // buffer capacity
-    buffer: Option<BytesMut>,   // Current buffer filled from reader
-    leftover: Option<BytesMut>, // Accumulates data when line spans multiple buffers
+    reader: R,
+    // Number of delivered physical lines, including empty lines.
+    offset: usize,
+    buffer_size: usize,
+    // Unconsumed bytes from the current read; None triggers the next read.
+    buffer: Option<BytesMut>,
+    // Prefix of a line whose terminating LF has not yet been found.
+    leftover: Option<BytesMut>,
 }
 
 impl<R: Read> LineReader<R> {
@@ -211,7 +229,8 @@ impl<R: Read> LineReader<R> {
             reader,
             offset: 0,
             buffer: None,
-            buffer_size: capacity,
+            // A zero-length read buffer could make nonempty input look exhausted.
+            buffer_size: capacity.max(1),
             leftover: None,
         }
     }
@@ -228,13 +247,15 @@ impl<R: Read> LineReader<R> {
             };
             if let Some(buffer) = self.buffer.as_mut() {
                 if let Some(pos) = memchr(b'\n', buffer) {
-                    // Fast path: newline found
+                    // Consume LF with the line so it cannot produce an extra
+                    // empty line on the next call; leave later bytes buffered.
                     let mut buf = buffer.split_to(pos + 1);
                     let mut line = if let Some(mut leftover) = self.leftover.take() {
                         leftover.extend_from_slice(&buf[..pos]);
                         leftover
                     } else {
-                        // Directly build from slice without heap copying if possible
+                        // Keep a slice of this buffer rather than copying the
+                        // line bytes into a separate accumulation buffer.
                         buf.split_to(pos)
                     };
                     // CR and LF may arrive in different reads; strip CR after joining.
@@ -245,7 +266,8 @@ impl<R: Read> LineReader<R> {
                     return Some(Ok(line.freeze()));
                 }
 
-                // No newline: accumulate leftover and continue
+                // Without LF, retain this chunk as an unfinished line. Reuse the
+                // first chunk directly and append subsequent chunks to it.
                 if let Some(left) = self.leftover.as_mut() {
                     left.extend_from_slice(buffer);
                     self.buffer = None
@@ -253,6 +275,8 @@ impl<R: Read> LineReader<R> {
                     std::mem::swap(&mut self.buffer, &mut self.leftover);
                 }
             } else {
+                // At EOF, return a final unterminated line once. Its last byte
+                // is content: a trailing CR is removed only as part of CRLF above.
                 let left = self
                     .leftover
                     .take()
@@ -269,6 +293,8 @@ impl<R: Read> LineReader<R> {
     #[inline]
     fn fill_buf(&mut self) -> io::Result<()> {
         if self.buffer.is_none() {
+            // Retain leftover across read errors so retrying can complete the
+            // same physical line. Only successfully read bytes enter buffer.
             let mut buffer = BytesMut::zeroed(self.buffer_size);
             let nbytes = self.reader.read(&mut buffer)?;
             if nbytes > 0 {
@@ -286,7 +312,7 @@ mod tests {
 
     use super::*;
 
-    const FILTER_REPORT: &[u8] = b"0\t0\t0\tU\t0\tunclassified\n100\t4\t0\tR\t1\troot\n100\t4\t0\tD\t2\t  Bacteria\n100\t4\t0\tG2\t10\t    Genus A\n50\t2\t2\tS\t11\t      Species A\n50\t2\t2\tS\t12\t      Species B\n100\t4\t0\tG\t20\t    Genus B\n100\t4\t4\tS\t21\t      Species C\n100\t4\t0\tD\t3\t  Archaea\n100\t4\t4\tS\t31\t      Skipped parent\n";
+    const FILTER_REPORT: &[u8] = b"0\t0\t0\tU\t0\tunclassified\n100\t4\t0\tR\t1\troot\n100\t4\t0\tD\t2\t  Bacteria\n100\t4\t0\tG2\t10\t    Genus A\n50\t2\t2\tS\t11\t      Species A\n50\t2\t2\tS\t12\t      Species B\n100\t4\t0\tG\t20\t    Genus B\n100\t4\t4\tS\t21\t      Species C\n100\t4\t0\tD\t3\t  Archaea\n100\t4\t4\tS\t31\t    Species D\n";
 
     fn filters(labels: &[&str]) -> HashSet<TaxonSpec> {
         labels
@@ -331,6 +357,58 @@ mod tests {
         assert_eq!(species.taxon().taxid().as_str(), "11");
         assert_eq!(species.lineage(), std::slice::from_ref(domain.taxon()));
         assert!(entries.next().is_none());
+    }
+
+    #[test]
+    fn entry_selection_uses_the_new_parent_after_statistics_errors() {
+        for (minimizers, invalid_statistics) in [
+            ("", "invalid\t2\t0\t"),
+            ("20\t5\t", "invalid\t2\t0\t20\t5\t"),
+            ("20\t5\t", "50\t2\t0\tinvalid\t5\t"),
+            ("20\t5\t", "50\t2\t0\t20\tinvalid\t"),
+        ] {
+            let input = format!(
+                "100\t4\t0\t{minimizers}D\t2\tBacteria\n\
+                 50\t2\t0\t{minimizers}G\t10\t  Genus A\n\
+                 {invalid_statistics}G\t20\t  Genus B\n\
+                 50\t2\t2\t{minimizers}S\t21\t    Species B\n"
+            );
+            let mut previous_branch =
+                KrakenReportReader::with_filters(filters(&["10"]), input.as_bytes());
+            assert_eq!(
+                previous_branch
+                    .read_entry()
+                    .unwrap()
+                    .unwrap()
+                    .taxon()
+                    .taxid()
+                    .as_str(),
+                "10"
+            );
+            assert!(matches!(
+                previous_branch.read_entry(),
+                Err(Error::Parse { line: 3, .. })
+            ));
+            assert!(previous_branch.read_entry().unwrap().is_none());
+
+            let mut current_branch =
+                KrakenReportReader::with_filters(filters(&["20"]), input.as_bytes());
+            assert!(matches!(
+                current_branch.read_entry(),
+                Err(Error::Parse { line: 3, .. })
+            ));
+            let species = current_branch.read_entry().unwrap().unwrap();
+            assert_eq!(species.taxon().taxid().as_str(), "21");
+            assert_eq!(
+                species
+                    .lineage()
+                    .iter()
+                    .map(|taxon| taxon.taxid().as_str())
+                    .collect::<Vec<_>>(),
+                ["2", "20"]
+            );
+            assert!(current_branch.read_entry().unwrap().is_none());
+        }
     }
 
     #[test]
@@ -416,12 +494,18 @@ mod tests {
     }
 
     #[test]
-    fn root_selection_does_not_match_through_ancestry() {
-        let mut reader = KrakenReportReader::with_filters(filters(&["Root"]), FILTER_REPORT);
-        let entry = reader.read_entry().unwrap().unwrap();
-        assert!(entry.taxon().is_root());
-        assert!(entry.lineage().is_empty());
-        assert!(reader.read_entry().unwrap().is_none());
+    fn root_selection_matches_only_root_rank_entries() {
+        for label in ["Root", "R", "1"] {
+            let mut reader = KrakenReportReader::with_filters(filters(&[label]), FILTER_REPORT);
+            let entries = reader.entries().collect::<Result<Vec<_>, _>>().unwrap();
+            assert_eq!(
+                entries
+                    .iter()
+                    .map(|entry| entry.taxon().taxid().as_str())
+                    .collect::<Vec<_>>(),
+                ["1"]
+            );
+        }
     }
 
     #[test]
@@ -448,7 +532,7 @@ mod tests {
             (&["G1__Genus A"], &[]),
             (&["12", "10", "10"], &["10", "11", "12"]),
             (&["S__Species B", "G__Genus A"], &["10", "11", "12"]),
-            (&["3"], &["3"]),
+            (&["3"], &["3", "31"]),
         ];
         for minimizers in [false, true] {
             let input = String::from_utf8(FILTER_REPORT.to_vec()).unwrap();
@@ -512,6 +596,42 @@ mod tests {
     }
 
     #[test]
+    fn missing_parents_are_reported_with_line_context_in_both_report_formats() {
+        for minimizers in ["", "30\t7\t"] {
+            for (level, taxid) in [("D", "2"), ("R", "1")] {
+                let input = format!(
+                    "\n100\t4\t0\t{minimizers}{level}\t{taxid}\tParent\n100\t4\t4\t{minimizers}S\t11\t    Species\n"
+                );
+                for taxon_specs in [HashSet::default(), filters(&["999"])] {
+                    let error = load_kreport(input.as_bytes(), taxon_specs).unwrap_err();
+                    assert!(matches!(
+                        error,
+                        Error::Parse { line: 3, ref source }
+                            if source.to_string() == "No taxon at hierarchy depth 1 in the current lineage"
+                    ));
+                    assert!(error.source().is_some());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn reading_after_a_lineage_error_preserves_the_last_valid_ancestors() {
+        let input = b"100\t4\t0\tD\t2\tBacteria\n100\t4\t4\tS\t11\t    Missing parent\n100\t4\t0\tG\t10\t  Genus\n";
+        let mut reader = KrakenReportReader::new(input.as_slice());
+        let bacteria = reader.read_entry().unwrap().unwrap();
+
+        assert!(matches!(
+            reader.read_entry(),
+            Err(Error::Parse { line: 2, .. })
+        ));
+        let genus = reader.read_entry().unwrap().unwrap();
+        assert_eq!(genus.taxon().taxid().as_str(), "10");
+        assert_eq!(genus.lineage(), std::slice::from_ref(bacteria.taxon()));
+        assert!(reader.read_entry().unwrap().is_none());
+    }
+
+    #[test]
     fn filtered_reading_propagates_parse_errors_after_unselected_entries() {
         let input = b"100\t4\t0\tD\t2\tBacteria\n\nbroken\n";
         let mut reader = KrakenReportReader::with_filters(filters(&["999"]), input.as_slice());
@@ -569,11 +689,11 @@ mod tests {
                 3,
                 "Invalid line with 1 fields; expected 6 or 8",
             ),
-            (b"100\t4\t0\t\t1\troot\n", 1, "Missing rank"),
+            (b"100\t4\t0\t\t1\troot\n", 1, "Missing taxonomic level"),
             (
                 b"\n100\t4\t0\tR\t1\troot\n \t \r\n100\t4\t0\t\t2\t  Bacteria\n",
                 4,
-                "Missing rank",
+                "Missing taxonomic level",
             ),
         ] {
             let load_error = load_kreport(input, HashSet::default()).unwrap_err();
@@ -757,30 +877,66 @@ mod tests {
     }
 
     #[test]
-    fn a_new_top_level_entry_clears_the_previous_ancestry() {
-        let input = b"100\t4\t0\tD\t2\tBacteria\n100\t4\t4\tS\t11\t  Species A\n100\t4\t0\tD\t3\tArchaea\n100\t4\t4\tS\t31\t  Species B\n";
-        let mut reader = KrakenReportReader::new(Cursor::new(input));
-        reader.read_entry().unwrap().unwrap();
-        reader.read_entry().unwrap().unwrap();
-        let archaea = reader.read_entry().unwrap().unwrap();
-        assert!(archaea.lineage().is_empty());
-        let species = reader.read_entry().unwrap().unwrap();
-        assert_eq!(species.lineage().len(), 1);
-        assert_eq!(species.lineage()[0].taxid().as_str(), "3");
+    fn a_second_top_level_entry_is_rejected_without_replacing_the_lineage() {
+        for minimizers in ["", "30\t7\t"] {
+            let input = format!(
+                "100\t4\t0\t{minimizers}R\t1\troot\n\
+                 100\t4\t0\t{minimizers}D\t2\t  Bacteria\n\
+                 100\t4\t0\t{minimizers}R\t1\troot\n\
+                 100\t4\t4\t{minimizers}G\t10\t    Genus\n"
+            );
+            let mut reader = KrakenReportReader::new(input.as_bytes());
+            reader.read_entry().unwrap().unwrap();
+            let bacteria = reader.read_entry().unwrap().unwrap();
+            assert!(matches!(
+                reader.read_entry(),
+                Err(Error::Parse { line: 3, ref source })
+                    if source.to_string() == "Cannot descend from hierarchy depth 1 to 0; expected an immediate child"
+            ));
+            let genus = reader.read_entry().unwrap().unwrap();
+            assert_eq!(genus.lineage(), std::slice::from_ref(bacteria.taxon()));
+        }
     }
 
     #[test]
-    fn intermediate_root_levels_are_excluded_from_lineages() {
-        let input = b"100\t4\t0\tR\t1\troot\n100\t4\t0\tR1\t131567\t  cellular organisms\n100\t4\t4\tD\t2\t    Bacteria\n";
-        let mut reader = KrakenReportReader::new(Cursor::new(input));
-        reader.read_entry().unwrap().unwrap();
-        let cellular = reader.read_entry().unwrap().unwrap();
-        assert_eq!(cellular.taxon().taxid().as_str(), "131567");
-        assert!(cellular.taxon().is_root());
-        assert!(cellular.lineage().is_empty());
-        let bacteria = reader.read_entry().unwrap().unwrap();
-        assert_eq!(bacteria.taxon().taxid().as_str(), "2");
-        assert!(bacteria.lineage().is_empty());
+    fn root_rank_entries_are_returned_without_root_rank_ancestors() {
+        for minimizers in ["", "30\t7\t"] {
+            let input = format!(
+                "100\t4\t0\t{minimizers}R\t1\troot\n\
+                 100\t4\t0\t{minimizers}R1\t131567\t  cellular organisms\n\
+                 100\t4\t4\t{minimizers}D\t2\t    Bacteria\n"
+            );
+            let mut reader = KrakenReportReader::new(input.as_bytes());
+            let root = reader.read_entry().unwrap().unwrap();
+            assert_eq!(root.taxon().taxid().as_str(), "1");
+            assert!(root.lineage().is_empty());
+            let cellular = reader.read_entry().unwrap().unwrap();
+            assert_eq!(cellular.taxon().taxid().as_str(), "131567");
+            assert!(!cellular.taxon().is_root());
+            assert!(cellular.lineage().is_empty());
+            let bacteria = reader.read_entry().unwrap().unwrap();
+            assert_eq!(bacteria.taxon().taxid().as_str(), "2");
+            assert!(bacteria.lineage().is_empty());
+        }
+    }
+
+    #[test]
+    fn filtering_an_intermediate_descendant_of_root_selects_only_that_taxon() {
+        for minimizers in ["", "30\t7\t"] {
+            let input = format!(
+                "100\t4\t0\t{minimizers}R\t1\troot\n\
+                 100\t4\t0\t{minimizers}R1\t131567\t  cellular organisms\n\
+                 100\t4\t4\t{minimizers}D\t2\t    Bacteria\n"
+            );
+            let report = load_kreport(input.as_bytes(), filters(&["131567"])).unwrap();
+            assert_eq!(
+                report
+                    .taxids()
+                    .map(|taxid| taxid.as_str())
+                    .collect::<Vec<_>>(),
+                ["131567"]
+            );
+        }
     }
 
     #[test]
@@ -856,8 +1012,8 @@ mod tests {
     }
 
     #[test]
-    fn loading_preserves_branch_changes_and_skipped_levels() {
-        let input = b"\n20\t2\t2\tU\t0\tunclassified\n100\t10\t0\tR\t1\troot\n100\t10\t0\tD\t2\t  Bacteria\n100\t10\t0\tG\t10\t    Genus A\n50\t5\t5\tS\t11\t      Species A\n \t \n50\t5\t5\tS\t12\t      Species B\n100\t10\t0\tG\t20\t    Genus B\n100\t10\t10\tS\t21\t      Species C\n100\t10\t0\tD\t3\t  Archaea\n100\t10\t10\tS\t31\t      Skipped parent\n";
+    fn loading_preserves_branch_changes() {
+        let input = b"\n20\t2\t2\tU\t0\tunclassified\n100\t10\t0\tR\t1\troot\n100\t10\t0\tD\t2\t  Bacteria\n100\t10\t0\tG\t10\t    Genus A\n50\t5\t5\tS\t11\t      Species A\n \t \n50\t5\t5\tS\t12\t      Species B\n100\t10\t0\tG\t20\t    Genus B\n100\t10\t10\tS\t21\t      Species C\n100\t10\t0\tD\t3\t  Archaea\n100\t10\t10\tS\t31\t    Species D\n";
         let rows = load_kreport(input.as_slice(), HashSet::default())
             .unwrap()
             .into_entries()
@@ -884,7 +1040,7 @@ mod tests {
                 vec!["2"],
                 vec!["2", "20"],
                 vec![],
-                vec![],
+                vec!["3"],
             ]
         );
         assert_eq!(

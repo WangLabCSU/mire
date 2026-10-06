@@ -1,9 +1,55 @@
 use std::borrow::Cow;
 use std::fmt;
 
+use rustc_hash::FxHashSet as HashSet;
 use thiserror::Error;
 
-use super::vo::{Rank, Taxid, TaxidParseError, Taxon, TaxonLevel};
+use super::vo::{KrakenReportEntry, Rank, Taxid, TaxidParseError, Taxon, TaxonLevel};
+
+/// Taxa considered when matching a report entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EntrySpecScope {
+    /// The entry's taxon.
+    Taxon,
+    /// The entry's taxon and its ancestors.
+    Lineage,
+}
+
+/// Conditions for selecting report entries, optionally including descendants.
+/// Any matching condition selects an entry; no conditions select all entries.
+#[derive(Debug)]
+pub struct EntrySpec {
+    taxon_specs: HashSet<TaxonSpec>,
+    scope: EntrySpecScope,
+}
+
+impl EntrySpec {
+    pub fn new(taxon_specs: HashSet<TaxonSpec>, scope: EntrySpecScope) -> Self {
+        Self { taxon_specs, scope }
+    }
+
+    /// Whether the given report entry satisfies this specification.
+    pub fn is_satisfied_by(&self, entry: &KrakenReportEntry) -> bool {
+        // An empty set means unrestricted selection, rather than an OR over
+        // zero conditions, which would reject every entry.
+        if self.taxon_specs.is_empty() {
+            return true;
+        }
+        match self.scope {
+            EntrySpecScope::Taxon => self
+                .taxon_specs
+                .iter()
+                .any(|spec| spec.is_satisfied_by(entry.taxon())),
+            EntrySpecScope::Lineage => self.taxon_specs.iter().any(|spec| {
+                spec.is_satisfied_by(entry.taxon())
+                    || entry
+                        .lineage()
+                        .iter()
+                        .any(|taxon| spec.is_satisfied_by(taxon))
+            }),
+        }
+    }
+}
 
 /// A condition on a taxon's identifier, rank, taxonomic level or scientific name.
 ///
@@ -37,7 +83,7 @@ enum TaxonSpecInner {
     TaxonTerm(String),
 
     // Match both a taxonomic level and a scientific name.
-    LevelAndTerm { level: TaxonLevel, term: String },
+    TaxonLevelAndTaxonTerm { level: TaxonLevel, term: String },
 }
 
 impl From<Taxid> for TaxonSpec {
@@ -94,10 +140,14 @@ impl TaxonSpec {
             return Err(TaxonSpecParseError(TaxonSpecParseErrorKind::Empty));
         }
 
+        // Digit-only input commits to taxid parsing. Propagate validation errors
+        // such as leading zeros instead of treating an invalid identifier as a name.
         if value.bytes().all(|byte| byte.is_ascii_digit()) {
             return Ok(Taxid::new(value.into_owned())?.into());
         }
 
+        // Rank and level recognition is tentative: a failure here can still be
+        // a scientific name, so try the remaining forms before falling back.
         if let Ok(rank) = Rank::parse(&value) {
             return Ok(rank.into());
         }
@@ -106,15 +156,19 @@ impl TaxonSpec {
             return Ok(level.into());
         }
 
+        // Split only the first separator so later "__" sequences remain in the
+        // name. Commit to this form only when both parts can be interpreted.
         if let Some((level, term)) = value.split_once("__").filter(|(_, term)| !term.is_empty()) {
             if let Ok(level) = TaxonLevel::parse(level) {
-                return Ok(Self(TaxonSpecInner::LevelAndTerm {
+                return Ok(Self(TaxonSpecInner::TaxonLevelAndTaxonTerm {
                     level,
                     term: term.to_owned(),
                 }));
             }
         }
 
+        // Preserve the entire input on fallback, including an invalid level
+        // prefix or an incomplete separator, rather than silently discarding it.
         Ok(Self(TaxonSpecInner::TaxonTerm(value.into_owned())))
     }
 
@@ -136,11 +190,13 @@ impl TaxonSpec {
             TaxonSpecInner::TaxonRank(rank) => taxon.rank() == rank,
             TaxonSpecInner::TaxonLevel(level) => {
                 taxon.rank() == level.rank()
-                    // Depth 0 represents no intermediate level.
+                    // No intermediate level (depth 0) leaves depth unrestricted;
+                    // a requested intermediate level requires an exact match.
                     && (level.depth() == 0 || taxon.depth() == level.depth())
             }
             TaxonSpecInner::TaxonTerm(term) => taxon.term() == term,
-            TaxonSpecInner::LevelAndTerm { level, term } => {
+            TaxonSpecInner::TaxonLevelAndTaxonTerm { level, term } => {
+                // Apply the same depth rule before comparing the full name.
                 taxon.rank() == level.rank()
                     && (level.depth() == 0 || taxon.depth() == level.depth())
                     && taxon.term() == term
@@ -179,10 +235,93 @@ enum TaxonSpecParseErrorKind {
 mod tests {
     use std::borrow::Cow;
 
-    use super::super::vo::{Rank, Taxid, TaxidParseError};
+    use rustc_hash::FxHashSet as HashSet;
+
+    use super::super::vo::{KrakenReportEntry, Rank, Taxid, TaxidParseError};
     use super::{
-        Taxon, TaxonLevel, TaxonSpec, TaxonSpecInner, TaxonSpecParseError, TaxonSpecParseErrorKind,
+        EntrySpec, EntrySpecScope, Taxon, TaxonLevel, TaxonSpec, TaxonSpecInner,
+        TaxonSpecParseError, TaxonSpecParseErrorKind,
     };
+
+    fn species_entry() -> KrakenReportEntry {
+        let [bacteria, genus, species] = [
+            ("D", "2", "Bacteria"),
+            ("G", "10", "Genus"),
+            ("S", "11", "Species A"),
+        ]
+        .map(|(level, taxid, term)| {
+            Taxon::new(
+                TaxonLevel::parse(level).unwrap(),
+                Taxid::new(taxid.to_owned()).unwrap(),
+                term.to_owned(),
+            )
+        });
+        KrakenReportEntry::new(100.0, 4, 4, None, None, species, vec![bacteria, genus], 2)
+    }
+
+    fn taxon_specs(labels: &[&str]) -> HashSet<TaxonSpec> {
+        labels
+            .iter()
+            .map(|label| TaxonSpec::try_from(*label).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn entry_selection_includes_entries_without_conditions() {
+        let entry = species_entry();
+        for scope in [EntrySpecScope::Taxon, EntrySpecScope::Lineage] {
+            let spec = EntrySpec::new(HashSet::default(), scope);
+            assert!(spec.is_satisfied_by(&entry), "scope: {scope:?}");
+        }
+    }
+
+    #[test]
+    fn entry_selection_matches_the_entry_taxon() {
+        let entry = species_entry();
+        for scope in [EntrySpecScope::Taxon, EntrySpecScope::Lineage] {
+            let spec = EntrySpec::new(taxon_specs(&["11"]), scope);
+            assert!(spec.is_satisfied_by(&entry), "scope: {scope:?}");
+        }
+    }
+
+    #[test]
+    fn entry_selection_includes_descendants_of_selected_ancestors() {
+        let entry = species_entry();
+        for taxid in ["2", "10"] {
+            let spec = EntrySpec::new(taxon_specs(&[taxid]), EntrySpecScope::Lineage);
+            assert!(spec.is_satisfied_by(&entry), "{taxid}");
+        }
+    }
+
+    #[test]
+    fn entry_selection_can_exclude_descendants() {
+        let entry = species_entry();
+        for taxid in ["2", "10"] {
+            let spec = EntrySpec::new(taxon_specs(&[taxid]), EntrySpecScope::Taxon);
+            assert!(!spec.is_satisfied_by(&entry), "{taxid}");
+        }
+    }
+
+    #[test]
+    fn entry_selection_accepts_any_matching_condition() {
+        let entry = species_entry();
+        for (scope, labels) in [
+            (EntrySpecScope::Taxon, ["12", "11"]),
+            (EntrySpecScope::Lineage, ["12", "2"]),
+        ] {
+            let spec = EntrySpec::new(taxon_specs(&labels), scope);
+            assert!(spec.is_satisfied_by(&entry), "scope: {scope:?}");
+        }
+    }
+
+    #[test]
+    fn entry_selection_excludes_unrelated_taxa() {
+        let entry = species_entry();
+        for scope in [EntrySpecScope::Taxon, EntrySpecScope::Lineage] {
+            let spec = EntrySpec::new(taxon_specs(&["12", "3"]), scope);
+            assert!(!spec.is_satisfied_by(&entry), "scope: {scope:?}");
+        }
+    }
 
     #[test]
     fn borrowed_and_owned_conditions_are_equivalent() {
@@ -343,7 +482,7 @@ mod tests {
     fn parses_level_and_term_spec() {
         assert_eq!(
             TaxonSpec::parse("D__Bacteria".into()).unwrap().0,
-            TaxonSpecInner::LevelAndTerm {
+            TaxonSpecInner::TaxonLevelAndTaxonTerm {
                 level: TaxonLevel::parse("D").unwrap(),
                 term: "Bacteria".to_owned(),
             }

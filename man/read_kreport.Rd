@@ -16,17 +16,19 @@ written as a taxid (\code{"562"}), a full major-rank name (\code{"Genus"}), a
 taxonomic level (\code{"G"}, \code{"G2"}), a level and scientific name
 (\code{"D__Bacteria"}), or a scientific name (\code{"Bacteria"}). Inputs are
 interpreted in that order; full major-rank names are case-sensitive.
-Matching taxa and all their descendants are retained. If
-\code{NULL}, all classified report rows, including the root row, are returned.
-Blank lines and unclassified (\code{U}) rows are skipped.}
+Rows are retained when their taxon or an ancestor in their lineage matches.
+Taxid \code{"1"} selects the root row alone. If \code{NULL}, all classified report rows,
+including the root row, are returned.
+Blank lines and valid unclassified (\code{U}) rows are skipped. Malformed
+unclassified rows produce an error identifying the report line.}
 }
 \value{
 A data frame containing the report columns \code{percents},
-\code{total_reads}, \code{reads}, \code{rank}, \code{taxid}, and \code{taxon}.
-Eight-column reports additionally contain \code{minimizer_len} and
-\code{minimizer_n_unique}. The list columns \code{ranks}, \code{taxids}, and
-\code{taxa} contain each row's ancestors only; the current taxon and root
-(\code{R}) are excluded. Intermediate ranks such as \code{R1} are retained.
+\code{total_reads}, \code{reads}, \code{rank}, \code{taxid}, and \code{taxon}. Eight-column reports
+additionally contain \code{minimizer_len} and \code{minimizer_n_unique}. The list
+columns \code{ranks}, \code{taxids}, and \code{taxa} contain each row's ancestors only;
+the current taxon and ancestors whose major rank is root, such as \code{R}, \code{R1}
+and \code{R2}, are excluded. Other intermediate levels, such as \code{G2}, are retained.
 If no classified taxa match, the data frame has zero rows.
 }
 \description{

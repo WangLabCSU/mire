@@ -166,14 +166,30 @@ mod tests {
     }
 
     #[test]
-    fn root_and_leaf_selection_preserve_ancestor_membership() {
+    fn root_selection_includes_descendants_when_requested() {
         let report = report();
-        for taxid in ["1", "11"] {
-            let taxids = [taxid.to_owned()].into_iter().collect();
-            let selected = select_taxids(&report, None, None, Some(&taxids), true);
-            assert_eq!(selected.len(), 1);
-            assert!(selected.contains(taxid.as_bytes()));
+        let taxids = ["1".to_owned()].into_iter().collect();
+        for descendants in [false, true] {
+            let selected = select_taxids(&report, None, None, Some(&taxids), descendants);
+            let expected = if descendants {
+                vec!["1", "2", "10", "11", "12"]
+            } else {
+                vec!["1"]
+            };
+            assert_eq!(selected.len(), expected.len());
+            assert!(expected
+                .iter()
+                .all(|taxid| selected.contains(taxid.as_bytes())));
         }
+    }
+
+    #[test]
+    fn leaf_selection_excludes_ancestors() {
+        let report = report();
+        let taxids = ["11".to_owned()].into_iter().collect();
+        let selected = select_taxids(&report, None, None, Some(&taxids), true);
+        assert_eq!(selected.len(), 1);
+        assert!(selected.contains(b"11".as_slice()));
     }
 
     #[test]

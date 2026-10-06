@@ -8,15 +8,18 @@
 #'   taxonomic level (`"G"`, `"G2"`), a level and scientific name
 #'   (`"D__Bacteria"`), or a scientific name (`"Bacteria"`). Inputs are
 #'   interpreted in that order; full major-rank names are case-sensitive.
-#'   Matching taxa and all their descendants are retained. If
-#'   `NULL`, all classified report rows, including the root row, are returned.
-#'   Blank lines and unclassified (`U`) rows are skipped.
+#'   Rows are retained when their taxon or an ancestor in their lineage matches.
+#'   Taxid `"1"` selects the root row alone. If `NULL`, all classified report rows,
+#'   including the root row, are returned.
+#'   Blank lines and valid unclassified (`U`) rows are skipped. Malformed
+#'   unclassified rows produce an error identifying the report line.
 #' @return A data frame containing the report columns `percents`,
 #'   `total_reads`, `reads`, `rank`, `taxid`, and `taxon`. Eight-column reports
 #'   additionally contain `minimizer_len` and `minimizer_n_unique`. The list
 #'   columns `ranks`, `taxids`, and `taxa` contain each row's ancestors only;
-#'   the current taxon and root (`R`) are excluded. Intermediate ranks such as
-#'   `R1` are retained. If no classified taxa match, the data frame has zero rows.
+#'   the current taxon and ancestors whose major rank is root, such as `R`, `R1`
+#'   and `R2`, are excluded. Other intermediate levels, such as `G2`, are retained.
+#'   If no classified taxa match, the data frame has zero rows.
 #' @details Taxids in report rows and numeric taxonomy selections must use
 #'   decimal digits without leading zeros, for example `"2"` or `"562"`.
 #'   A single `"0"` denotes unclassified reads. Empty identifiers, signs,

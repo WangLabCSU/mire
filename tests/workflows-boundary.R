@@ -48,14 +48,22 @@ local({
     # Preserve six/eight-column report schemas, row order, and taxonomy selection.
     parsed <- call("read_kreport", path("report.tsv"), NULL)
     stopifnot(identical(parsed$taxid, c("1", "2", "10", "11", "12")),
-              identical(parsed$taxids, list(character(), character(), "2",
-                                            c("2", "10"), c("2", "10"))),
+              identical(parsed$taxids, list(character(), "1", c("1", "2"),
+                                            c("1", "2", "10"), c("1", "2", "10"))),
               !"minimizer_len" %in% names(parsed))
     write_lines(c("20\t1\t1\tU\t0\tunclassified", "", report), path("unclassified.tsv"))
     stopifnot(identical(call("read_kreport", path("unclassified.tsv"), NULL), parsed))
     leaf <- call("read_kreport", path("report.tsv"), "11")
-    stopifnot(identical(leaf$taxid, "11"), identical(leaf$taxids, list(c("2", "10"))))
+    stopifnot(identical(leaf$taxid, "11"), identical(leaf$taxids, list(c("1", "2", "10"))))
+    for (taxonomy in c("Root", "R", "1")) {
+        stopifnot(identical(call("read_kreport", path("report.tsv"), taxonomy), parsed))
+    }
     write_lines("100\t4\t4\tU\t0\tunclassified", path("unclassified-only.tsv"))
+    for (statistics in c("20\t1\tinvalid", "20\t1\t1\tinvalid\t5")) {
+        write_lines(c(report[[1L]], paste0(statistics, "\tU\t0\tunclassified")),
+                    path("invalid-unclassified.tsv"))
+        fails("read_kreport", path("invalid-unclassified.tsv"), NULL, message = "line 2")
+    }
     stopifnot(length(call("read_kreport", path("unclassified-only.tsv"), NULL)$taxid) == 0L,
               length(call("read_kreport", path("unclassified-only.tsv"), "999")$taxid) == 0L,
               length(call("read_kreport", path("report.tsv"), "999")$taxid) == 0L)
@@ -75,7 +83,7 @@ local({
         write_lines(ranked, path("ranked.tsv"))
         parsed_rank <- call("read_kreport", path("ranked.tsv"), "G2__Genus")
         stopifnot(identical(parsed_rank$rank, c("G2", "S", "S")),
-                  identical(parsed_rank$ranks[[2L]], c("D", "G2")),
+                  identical(parsed_rank$ranks[[2L]], c("R", "D", "G2")),
                   identical(parsed_rank$taxid, c("10", "11", "12")))
         for (taxonomy in c("G__Genus", "G0__Genus", "Genus", "G", "G0", "G2")) {
             stopifnot(identical(call("read_kreport", path("ranked.tsv"), taxonomy),
@@ -84,12 +92,12 @@ local({
         stopifnot(length(call("read_kreport", path("ranked.tsv"), "G1__Genus")$taxid) == 0L)
         named_leaf <- call("read_kreport", path("ranked.tsv"), "Species A")
         stopifnot(identical(named_leaf$taxid, "11"),
-                  identical(named_leaf$taxids, list(c("2", "10"))))
+                  identical(named_leaf$taxids, list(c("1", "2", "10"))))
         ranked_zero <- sub("\tG2\t", "\tG0\t", ranked, fixed = TRUE)
         write_lines(ranked_zero, path("ranked-zero.tsv"))
         parsed_zero <- call("read_kreport", path("ranked-zero.tsv"), "G0__Genus")
         stopifnot(identical(parsed_zero$rank, c("G", "S", "S")),
-                  identical(parsed_zero$ranks[[2L]], c("D", "G")),
+                  identical(parsed_zero$ranks[[2L]], c("R", "D", "G")),
                   identical(parsed_zero$taxid, c("10", "11", "12")))
     }
     for (rank in c("X", "G256", "Gx", "G00", "G02", "G002")) {
@@ -178,7 +186,7 @@ local({
     counts <- call("krcount", path("joined.tsv.gz"), path("report.tsv"), "G__Genus",
                    NULL, "BARCODE", 1L, 0L)
     stopifnot(identical(names(counts), c("taxa", "counts", "kmer_total", "kmer_unique")),
-              identical(names(counts$taxa), c("D", "G", "S")),
+              identical(names(counts$taxa), c("R", "D", "G", "S")),
               identical(as.numeric(counts$counts$ACGT), c(1, 1, NA)),
               identical(as.numeric(counts$counts$GCTA), c(1, NA, 1)),
               identical(as.numeric(counts$kmer_total$ACGT), c(10, 10, NA)),

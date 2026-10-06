@@ -6,64 +6,117 @@ use super::vo::{
     KrakenReportEntry, Taxid, TaxidParseError, Taxon, TaxonLevel, TaxonLevelParseError,
 };
 
-/// Maintain the taxonomic lineage while parsing a Kraken report.
-pub(crate) struct LineageState {
-    hierarchy_depths: Vec<usize>,
+/// A path through consecutive levels of the taxonomic hierarchy.
+pub(crate) struct LineagePath {
+    // The endpoint's report depth; None exactly when the path is empty.
+    depth: Option<usize>,
+    // Taxa from the first known ancestor through the endpoint, at consecutive depths.
     lineage: Vec<Taxon>,
 }
 
-impl LineageState {
-    /// Start a report with no known ancestors.
+impl LineagePath {
+    /// Start an empty taxonomic path.
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
-        Self::with_capacity(10)
+        Self::with_capacity(0)
     }
 
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
-            hierarchy_depths: Vec::with_capacity(capacity),
+            depth: None,
             lineage: Vec::with_capacity(capacity),
         }
     }
 
-    /// Advance the lineage state and return the taxon's ancestor lineage.
-    // Hierarchy depth identifies the parent in the report. It is independent
-    // of intermediate rank depth, such as the distance below genus in `G2`.
-    // If the immediate parent is absent, the taxon starts a new lineage.
-    fn advance(&mut self, taxon: &Taxon, hierarchy_depth: usize) -> Vec<Taxon> {
-        while let Some(ancestor_depth) = self.hierarchy_depths.last() {
-            if Some(*ancestor_depth) == hierarchy_depth.checked_sub(1) {
-                break;
+    /// Taxa from the first known ancestor through the current endpoint.
+    fn lineage(&self) -> &Vec<Taxon> {
+        &self.lineage
+    }
+
+    /// Shorten the path to end at the taxon at the requested hierarchy depth.
+    ///
+    /// # Errors
+    /// Returns an error if the requested depth is not on the path, leaving it unchanged.
+    fn ascend(&mut self, target_depth: usize) -> Result<(), LineagePathError> {
+        // Validate before updating either field so a rejected ascent preserves the path.
+        // A path may start below the root, so report depths are not vector indices.
+        // The depth difference counts the taxa to remove after the target ancestor.
+        let steps_back = self
+            .depth
+            .and_then(|depth| depth.checked_sub(target_depth))
+            // Retain the target taxon; removing every taxon would accept an unknown ancestor.
+            .filter(|steps| *steps < self.lineage.len())
+            .ok_or(LineagePathError::UnknownDepth {
+                depth: target_depth,
+            })?;
+        self.lineage.truncate(self.lineage.len() - steps_back);
+        self.depth = Some(target_depth);
+        Ok(())
+    }
+
+    /// Extend the path to a direct child of its current endpoint.
+    /// An empty path can start with a taxon at any hierarchy depth.
+    ///
+    /// # Errors
+    /// Returns an error if the new depth is not immediately below the endpoint,
+    /// leaving the path unchanged.
+    fn descend(&mut self, taxon: Taxon, hierarchy_depth: usize) -> Result<(), LineagePathError> {
+        // Validate before updating either field so a rejected descent preserves the path.
+        if let Some(current_depth) = self.depth {
+            // Compare parent depths to reject another top-level taxon without
+            // adding to current_depth, which could overflow at usize::MAX.
+            if hierarchy_depth.checked_sub(1) != Some(current_depth) {
+                return Err(LineagePathError::InvalidDescent {
+                    current_depth,
+                    target_depth: hierarchy_depth,
+                });
             }
-            self.hierarchy_depths.pop();
-            self.lineage.pop();
         }
-        let lineage = self.lineage.clone();
-        if !taxon.is_root() {
-            self.hierarchy_depths.push(hierarchy_depth);
-            self.lineage.push(taxon.clone());
-        }
-        lineage
+        self.lineage.push(taxon);
+        self.depth = Some(hierarchy_depth);
+        Ok(())
     }
 }
 
-// Parse report rows and advance the lineage state.
+// A rejected path operation leaves both its taxa and endpoint depth unchanged.
+#[derive(Debug, thiserror::Error)]
+enum LineagePathError {
+    #[error("No taxon at hierarchy depth {depth} in the current lineage")]
+    UnknownDepth { depth: usize },
+
+    #[error("Cannot descend from hierarchy depth {current_depth} to {target_depth}; expected an immediate child")]
+    InvalidDescent {
+        current_depth: usize,
+        target_depth: usize,
+    },
+}
+
+// Interpret report rows, coordinate path movement and assemble each entry's ancestors.
 pub(crate) struct KrakenReportParser;
 
 impl KrakenReportParser {
+    pub(crate) fn new() -> Self {
+        KrakenReportParser
+    }
+
     pub(crate) fn parse_entry(
+        &self,
         line: &[u8],
-        state: &mut LineageState,
+        path: &mut LineagePath,
     ) -> Result<Option<KrakenReportEntry>, ParseError> {
+        // Blank lines carry no hierarchy information and must not alter the path.
         if line.iter().all(|byte| byte.is_ascii_whitespace()) {
             return Ok(None);
         }
-        Self::parse_line(line, state).map_err(ParseError)
+        Self::parse_line(line, path).map_err(ParseError)
     }
 
     fn parse_line(
         line: &[u8],
-        state: &mut LineageState,
+        path: &mut LineagePath,
     ) -> Result<Option<KrakenReportEntry>, ParseErrorKind> {
+        // Split on tabs to preserve empty fields and the scientific name's
+        // indentation; splitting on whitespace would lose both.
         let fields = line.split(|byte| *byte == b'\t').collect::<Vec<_>>();
 
         // https://github.com/DerrickWood/kraken2/blob/master/docs/MANUAL.markdown
@@ -73,44 +126,45 @@ impl KrakenReportParser {
         // * 4. Number of minimizers in read data associated with this taxon (new)
         // * 5. An estimate of the number of distinct minimizers in read data
         //    associated with this taxon (new)
-        // 6. A major rank abbreviation: (U)nclassified, (R)oot, (D)omain,
+        // 6. A taxonomic level starts with a major rank abbreviation:
+        //    (U)nclassified, (R)oot, (D)omain,
         //    (K)ingdom, (P)hylum, (C)lass, (O)rder, (F)amily, (G)enus or (S)pecies.
         //    Intermediate ranks append a depth indicating the distance from the
         //    nearest ancestor at a major rank. For example, "G2" denotes a taxon
         //    two levels below its genus ancestor.
         // 7. NCBI taxonomic ID number
         // 8. Indented scientific name
+        //
+        // Map the six- and eight-column layouts to the same fields. The
+        // six-column layout has no minimizer statistics.
         let (
             percentage,
             clade_reads,
             direct_reads,
             minimizer_count,
             distinct_minimizer_count,
-            rank,
+            level,
             taxid,
-            indented_taxon,
+            indented_term,
         ) = match fields.as_slice() {
-            [percentage, clade_reads, direct_reads, rank, taxid, taxon] => (
+            [percentage, clade_reads, direct_reads, level, taxid, taxon] => (
                 *percentage,
                 *clade_reads,
                 *direct_reads,
                 None,
                 None,
-                *rank,
+                *level,
                 *taxid,
                 *taxon,
             ),
-            [percentage, clade_reads, direct_reads, minimizer_count, distinct_minimizer_count, rank, taxid, taxon] => {
+            [percentage, clade_reads, direct_reads, minimizer_count, distinct_minimizer_count, level, taxid, taxon] => {
                 (
                     *percentage,
                     *clade_reads,
                     *direct_reads,
-                    Some(Self::parse_usize(minimizer_count, "minimizer count")?),
-                    Some(Self::parse_usize(
-                        distinct_minimizer_count,
-                        "distinct minimizer count",
-                    )?),
-                    *rank,
+                    Some(*minimizer_count),
+                    Some(*distinct_minimizer_count),
+                    *level,
                     *taxid,
                     *taxon,
                 )
@@ -122,54 +176,94 @@ impl KrakenReportParser {
             }
         };
 
-        rank.first().ok_or(ParseErrorKind::MissingRank)?;
-        let indentation = indented_taxon
-            .iter()
-            .take_while(|byte| **byte == b' ')
-            .count();
+        level.first().ok_or(ParseErrorKind::MissingLevel)?;
+        let level = Self::parse_text(level, "taxonomic level")?;
 
-        if indentation % 2 != 0 {
-            return Err(ParseErrorKind::InvalidTaxonIndentation);
-        }
-
-        let taxon = &indented_taxon[indentation..];
         if taxid.is_empty() {
             return Err(ParseErrorKind::MissingTaxid);
         }
-        if taxon.is_empty() {
+        let taxid = Self::parse_text(taxid, "taxid")?;
+
+        // Each pair of leading spaces is one step in the report hierarchy.
+        // Unlike the depth in G2, this depth is measured from the report root.
+        let indentation = indented_term
+            .iter()
+            .take_while(|byte| **byte == b' ')
+            .count();
+        if indentation % 2 != 0 {
+            return Err(ParseErrorKind::InvalidTaxonIndentation);
+        }
+        let hierarchy_depth = indentation / 2;
+
+        // Remove structural indentation without trimming the scientific name.
+        let term = &indented_term[indentation..];
+        if term.is_empty() {
             return Err(ParseErrorKind::MissingTaxonName);
         }
+        let term = Self::parse_text(term, "taxonomic name")?;
 
-        let rank = Self::parse_text(rank, "rank")?;
-        let taxid = Self::parse_text(taxid, "taxid")?;
-        let taxon = Self::parse_text(taxon, "taxon")?;
+        // Validate the taxonomic level and taxid before changing ancestry.
+        let taxon = Taxon::new(
+            TaxonLevel::parse(level)?,
+            Taxid::new(taxid.to_owned())?,
+            term.to_owned(),
+        );
+        let lineage;
+        if !taxon.is_unclassified() {
+            // Update ancestry before parsing statistics: a rejected numeric field
+            // still leaves a known parent for subsequent rows. For example, a
+            // species following a genus with an invalid count belongs to that
+            // genus, not to the previous branch. Do not roll back this path later.
+            // Keep the incoming taxon's parent, dropping the previous branch
+            // below it. A depth-zero row has no parent; descend validates it.
+            if let Some(parent_depth) = hierarchy_depth.checked_sub(1) {
+                path.ascend(parent_depth)?;
+            }
+
+            // Build the entry's ancestors between ascent and descent so the
+            // current taxon is not included. Keep the full path for later ascents,
+            // but skip root-rank ancestors (R, R1, R2, ...) before cloning.
+            lineage = Some(
+                path.lineage()
+                    .iter()
+                    .skip_while(|taxon| taxon.is_root_rank())
+                    .cloned()
+                    .collect(),
+            );
+            path.descend(taxon.clone(), hierarchy_depth)?;
+        } else {
+            // Leave the path unchanged and validate statistics before skipping the row.
+            lineage = None;
+        }
+
+        // Missing minimizer columns remain None; malformed values in present
+        // columns must still fail parsing.
+        let minimizer_count = minimizer_count
+            .map(|value| Self::parse_usize(value, "minimizer count"))
+            .transpose()?;
+        let distinct_minimizer_count = distinct_minimizer_count
+            .map(|value| Self::parse_usize(value, "distinct minimizer count"))
+            .transpose()?;
 
         let percentage = Self::parse_float(percentage, "percentage")?;
         let clade_reads = Self::parse_usize(clade_reads, "clade reads")?;
         let direct_reads = Self::parse_usize(direct_reads, "direct reads")?;
-        let taxon = Taxon::new(
-            TaxonLevel::parse(rank)?,
-            Taxid::new(taxid.to_owned())?,
-            taxon.to_owned(),
-        );
-        let hierarchy_depth = indentation / 2;
-        if taxon.is_unclassified() {
-            return Ok(None);
+
+        if let Some(lineage) = lineage {
+            Ok(Some(KrakenReportEntry::new(
+                percentage,
+                clade_reads,
+                direct_reads,
+                minimizer_count,
+                distinct_minimizer_count,
+                taxon,
+                lineage,
+                hierarchy_depth,
+            )))
+        } else {
+            // Skip the unclassified row only after all statistics are validated.
+            Ok(None)
         }
-
-        // Only complete, classified rows advance the lineage state.
-        let lineage = state.advance(&taxon, hierarchy_depth);
-
-        Ok(Some(KrakenReportEntry::new(
-            percentage,
-            clade_reads,
-            direct_reads,
-            minimizer_count,
-            distinct_minimizer_count,
-            taxon,
-            lineage,
-            hierarchy_depth,
-        )))
     }
 
     fn parse_text<'a>(value: &'a [u8], field: &'static str) -> Result<&'a str, ParseErrorKind> {
@@ -220,8 +314,8 @@ enum ParseErrorKind {
     #[error("Invalid line with {actual} fields; expected 6 or 8")]
     InvalidFieldCount { actual: usize },
 
-    #[error("Missing rank")]
-    MissingRank,
+    #[error("Missing taxonomic level")]
+    MissingLevel,
 
     #[error(transparent)]
     InvalidTaxonLevel(#[from] TaxonLevelParseError),
@@ -237,6 +331,9 @@ enum ParseErrorKind {
 
     #[error("Invalid taxon indentation; expected two spaces per taxonomic level")]
     InvalidTaxonIndentation,
+
+    #[error(transparent)]
+    InvalidLineagePath(#[from] LineagePathError),
 
     #[error("Invalid UTF-8 in {field}")]
     InvalidUtf8 {
@@ -267,17 +364,18 @@ mod tests {
     use std::slice;
 
     use super::{
-        KrakenReportEntry, KrakenReportParser, LineageState, ParseError, ParseErrorKind, Taxid,
-        Taxon, TaxonLevel,
+        KrakenReportEntry, KrakenReportParser, LineagePath, LineagePathError, ParseError,
+        ParseErrorKind, Taxid, Taxon, TaxonLevel,
     };
 
     fn parse(contents: &[u8]) -> Result<Vec<KrakenReportEntry>, ParseError> {
-        let mut state = LineageState::new();
+        let parser = KrakenReportParser::new();
+        let mut path = LineagePath::new();
         contents
             .strip_suffix(b"\n")
             .unwrap_or(contents)
             .split(|byte| *byte == b'\n')
-            .filter_map(|line| KrakenReportParser::parse_entry(line, &mut state).transpose())
+            .filter_map(|line| parser.parse_entry(line, &mut path).transpose())
             .collect()
     }
 
@@ -306,11 +404,13 @@ mod tests {
 
     #[test]
     fn unclassified_rows_return_no_entry() {
-        let mut state = LineageState::new();
+        let parser = KrakenReportParser::new();
+        let mut path = LineagePath::new();
         for minimizers in ["", "20\t5\t"] {
-            for rank in ["U", "U1"] {
-                let line = format!("20\t1\t1\t{minimizers}{rank}\t0\tunclassified");
-                assert!(KrakenReportParser::parse_entry(line.as_bytes(), &mut state)
+            for level in ["U", "U1"] {
+                let line = format!("20\t1\t1\t{minimizers}{level}\t0\tunclassified");
+                assert!(parser
+                    .parse_entry(line.as_bytes(), &mut path)
                     .unwrap()
                     .is_none());
             }
@@ -318,16 +418,30 @@ mod tests {
     }
 
     #[test]
-    fn malformed_unclassified_rows_still_return_errors() {
-        for minimizers in ["", "20\t5\t"] {
-            let invalid_percentage = format!("invalid\t1\t1\t{minimizers}U\t0\tunclassified");
+    fn unclassified_rows_reject_invalid_statistics() {
+        for (statistics, field) in [
+            ("invalid\t1\t1", "percentage"),
+            ("20\tinvalid\t1", "clade reads"),
+            ("20\t1\tinvalid", "direct reads"),
+            ("invalid\t1\t1\t20\t5", "percentage"),
+            ("20\tinvalid\t1\t20\t5", "clade reads"),
+            ("20\t1\tinvalid\t20\t5", "direct reads"),
+            ("20\t1\t1\tinvalid\t5", "minimizer count"),
+            ("20\t1\t1\t20\tinvalid", "distinct minimizer count"),
+        ] {
+            let input = format!("{statistics}\tU\t0\tunclassified");
             assert!(matches!(
-                parse(invalid_percentage.as_bytes()),
-                Err(ParseError(ParseErrorKind::InvalidFloat {
-                    field: "percentage",
-                    ..
-                }))
+                parse(input.as_bytes()),
+                Err(ParseError(ParseErrorKind::InvalidFloat { field: actual, .. }
+                    | ParseErrorKind::InvalidInteger { field: actual, .. }))
+                    if actual == field
             ));
+        }
+    }
+
+    #[test]
+    fn unclassified_rows_reject_invalid_taxids() {
+        for minimizers in ["", "20\t5\t"] {
             let invalid_taxid = format!("20\t1\t1\t{minimizers}U\t00\tunclassified");
             assert!(matches!(
                 parse(invalid_taxid.as_bytes()),
@@ -395,26 +509,24 @@ mod tests {
     }
 
     #[test]
-    fn blank_unclassified_and_invalid_lines_preserve_lineage() {
+    fn blank_unclassified_and_invalid_taxonomy_lines_preserve_lineage() {
+        let parser = KrakenReportParser::new();
         for (line, fails) in [
             (b" \t\r\n".as_slice(), false),
             (b"20\t1\t1\tU\t0\tunclassified", false),
             (b"broken", true),
-            (b"invalid\t4\t0\tD\t3\tArchaea", true),
             (b"100\t4\t0\tG2\t02\t  Genus", true),
         ] {
-            let mut state = LineageState::new();
-            KrakenReportParser::parse_entry(b"100\t4\t0\tD\t2\tBacteria", &mut state)
+            let mut path = LineagePath::new();
+            parser
+                .parse_entry(b"100\t4\t0\tD\t2\tBacteria", &mut path)
                 .unwrap()
                 .unwrap();
-            assert_eq!(
-                KrakenReportParser::parse_entry(line, &mut state).is_err(),
-                fails
-            );
-            let species =
-                KrakenReportParser::parse_entry(b"100\t4\t4\tS\t11\t  Species", &mut state)
-                    .unwrap()
-                    .unwrap();
+            assert_eq!(parser.parse_entry(line, &mut path).is_err(), fails);
+            let species = parser
+                .parse_entry(b"100\t4\t4\tS\t11\t  Species", &mut path)
+                .unwrap()
+                .unwrap();
             assert_eq!(
                 species
                     .lineage()
@@ -424,6 +536,38 @@ mod tests {
                 ["2"],
                 "{line:?}"
             );
+        }
+    }
+
+    #[test]
+    fn invalid_fragment_statistics_preserve_the_new_parent_for_descendants() {
+        let parser = KrakenReportParser::new();
+        for minimizers in ["", "20\t5\t"] {
+            for statistics in ["invalid\t4\t0", "100\tinvalid\t0", "100\t4\tinvalid"] {
+                let mut path = LineagePath::new();
+                parser
+                    .parse_entry(b"100\t4\t0\tD\t2\tBacteria", &mut path)
+                    .unwrap();
+                parser
+                    .parse_entry(b"100\t4\t0\tG\t10\t  Genus A", &mut path)
+                    .unwrap();
+                let parent = format!("{statistics}\t{minimizers}G\t20\t  Genus B");
+                assert!(parser.parse_entry(parent.as_bytes(), &mut path).is_err());
+
+                let species = parser
+                    .parse_entry(b"100\t4\t4\tS\t21\t    Species B", &mut path)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(
+                    species
+                        .lineage()
+                        .iter()
+                        .map(|taxon| taxon.taxid().as_str())
+                        .collect::<Vec<_>>(),
+                    ["2", "20"],
+                    "{parent}"
+                );
+            }
         }
     }
 
@@ -440,31 +584,30 @@ mod tests {
 
     #[test]
     fn blank_lines_are_not_report_rows() {
-        let mut state = LineageState::new();
+        let parser = KrakenReportParser::new();
+        let mut path = LineagePath::new();
         for line in [b"".as_slice(), b" ", b"\t", b" \t\r\n\x0c"] {
-            assert!(matches!(
-                KrakenReportParser::parse_entry(line, &mut state),
-                Ok(None)
-            ));
+            assert!(matches!(parser.parse_entry(line, &mut path), Ok(None)));
         }
     }
 
     #[test]
     fn nonblank_malformed_lines_are_errors() {
-        let mut state = LineageState::new();
+        let parser = KrakenReportParser::new();
+        let mut path = LineagePath::new();
         for line in [b"broken".as_slice(), b" \tbroken\r", b"\0", b"\xc2\xa0"] {
             assert!(matches!(
-                KrakenReportParser::parse_entry(line, &mut state),
+                parser.parse_entry(line, &mut path),
                 Err(ParseError(ParseErrorKind::InvalidFieldCount { .. }))
             ));
         }
     }
 
     #[test]
-    fn rejects_missing_rank() {
+    fn rejects_missing_level() {
         let error = parse(b"100.00\t10\t0\t\t1\troot\n").expect_err("expected an error");
 
-        assert!(matches!(error.0, ParseErrorKind::MissingRank));
+        assert!(matches!(error.0, ParseErrorKind::MissingLevel));
     }
 
     #[test]
@@ -494,7 +637,10 @@ mod tests {
 
         assert!(matches!(
             error.0,
-            ParseErrorKind::InvalidUtf8 { field: "taxon", .. }
+            ParseErrorKind::InvalidUtf8 {
+                field: "taxonomic name",
+                ..
+            }
         ));
     }
 
@@ -508,81 +654,332 @@ mod tests {
 
     #[test]
     fn lineages_contain_only_ancestors_in_report_order() {
-        let mut state = LineageState::new();
-        let bacteria = taxon("D", "2");
-        let genus = taxon("G", "10");
-        let species = taxon("S", "11");
+        let entries = parse(
+            b"100\t4\t0\tD\t2\tBacteria\n100\t4\t0\tG\t10\t  Genus\n100\t4\t4\tS\t11\t    Species\n",
+        )
+        .unwrap();
 
-        assert!(state.advance(&bacteria, 0).is_empty());
-        assert_eq!(state.advance(&genus, 1), slice::from_ref(&bacteria));
-        assert_eq!(state.advance(&species, 2), [bacteria, genus]);
+        assert!(entries[0].lineage().is_empty());
+        assert_eq!(entries[1].lineage(), slice::from_ref(entries[0].taxon()));
+        assert_eq!(
+            entries[2].lineage(),
+            [entries[0].taxon().clone(), entries[1].taxon().clone()]
+        );
     }
 
     #[test]
-    fn siblings_share_ancestors() {
-        let mut state = LineageState::new();
-        let genus = taxon("G", "10");
-        state.advance(&genus, 0);
-
-        let first = state.advance(&taxon("S", "11"), 1);
-        let second = state.advance(&taxon("S", "12"), 1);
-        assert_eq!(first, slice::from_ref(&genus));
-        assert_eq!(second, [genus]);
-    }
-
-    #[test]
-    fn changing_branches_replaces_ancestors_below_the_shared_parent() {
-        let mut state = LineageState::new();
-        let bacteria = taxon("D", "2");
-        let next_genus = taxon("G", "20");
-        state.advance(&bacteria, 0);
-        state.advance(&taxon("G", "10"), 1);
-        state.advance(&taxon("S", "11"), 2);
-
-        assert_eq!(state.advance(&next_genus, 1), slice::from_ref(&bacteria));
-        assert_eq!(state.advance(&taxon("S", "21"), 2), [bacteria, next_genus]);
-    }
-
-    #[test]
-    fn a_new_top_level_taxon_clears_the_previous_ancestry() {
-        let mut state = LineageState::new();
-        state.advance(&taxon("D", "2"), 0);
-        state.advance(&taxon("S", "11"), 1);
-        let archaea = taxon("D", "3");
-
-        assert!(state.advance(&archaea, 0).is_empty());
-        assert_eq!(state.advance(&taxon("S", "31"), 1), [archaea]);
-    }
-
-    #[test]
-    fn a_missing_immediate_parent_starts_a_new_lineage() {
-        let mut state = LineageState::new();
-        state.advance(&taxon("D", "2"), 0);
-        let genus = taxon("G", "10");
-
-        assert!(state.advance(&genus, 2).is_empty());
-        assert_eq!(state.advance(&taxon("S", "11"), 3), [genus]);
-    }
-
-    #[test]
-    fn root_taxa_never_become_ancestors() {
-        for root_level in ["R", "R1"] {
-            let mut state = LineageState::new();
-            let bacteria = taxon("D", "2");
-            assert!(state.advance(&taxon(root_level, "1"), 0).is_empty());
-            assert!(state.advance(&bacteria, 1).is_empty());
-            assert_eq!(state.advance(&taxon("G", "10"), 2), [bacteria]);
+    fn empty_lineages_have_no_depth() {
+        for path in [LineagePath::new(), LineagePath::with_capacity(10)] {
+            assert!(path.lineage.is_empty());
+            assert_eq!(path.depth, None);
         }
     }
 
     #[test]
+    fn ascending_to_an_unknown_depth_preserves_the_lineage() {
+        for target_depth in [0, 2, 5, usize::MAX] {
+            let mut path = LineagePath::new();
+            let genus = taxon("G", "10");
+            let species = taxon("S", "11");
+            path.descend(genus.clone(), 3).unwrap();
+            path.descend(species.clone(), 4).unwrap();
+
+            assert!(matches!(
+                path.ascend(target_depth),
+                Err(LineagePathError::UnknownDepth { depth }) if depth == target_depth
+            ));
+            assert_eq!(path.lineage, [genus, species]);
+            assert_eq!(path.depth, Some(4));
+        }
+    }
+
+    #[test]
+    fn ascending_an_empty_lineage_returns_an_error() {
+        for depth in [0, 1, usize::MAX] {
+            let mut path = LineagePath::new();
+            assert!(matches!(
+                path.ascend(depth),
+                Err(LineagePathError::UnknownDepth { .. })
+            ));
+            assert!(path.lineage.is_empty());
+            assert_eq!(path.depth, None);
+        }
+    }
+
+    #[test]
+    fn descending_to_a_nonchild_depth_preserves_the_lineage() {
+        for target_depth in [0, 2, 3, 5, usize::MAX] {
+            let mut path = LineagePath::new();
+            let genus = taxon("G", "10");
+            path.descend(genus.clone(), 3).unwrap();
+
+            assert!(matches!(
+                path.descend(taxon("S", "11"), target_depth),
+                Err(LineagePathError::InvalidDescent {
+                    current_depth: 3,
+                    target_depth: actual,
+                }) if actual == target_depth
+            ));
+            assert_eq!(path.lineage, [genus]);
+            assert_eq!(path.depth, Some(3));
+        }
+    }
+
+    #[test]
+    fn descending_beyond_the_maximum_depth_returns_an_error() {
+        let mut path = LineagePath::new();
+        let genus = taxon("G", "10");
+        path.descend(genus.clone(), usize::MAX).unwrap();
+
+        for depth in [0, usize::MAX] {
+            assert!(matches!(
+                path.descend(taxon("S", "11"), depth),
+                Err(LineagePathError::InvalidDescent { .. })
+            ));
+            assert_eq!(path.lineage, slice::from_ref(&genus));
+            assert_eq!(path.depth, Some(usize::MAX));
+        }
+    }
+
+    #[test]
+    fn ascending_retains_the_taxon_at_the_target_depth() {
+        let lineage = [taxon("D", "2"), taxon("G", "10"), taxon("S", "11")];
+
+        for target_depth in 0..lineage.len() {
+            let mut path = LineagePath::new();
+            for (depth, taxon) in lineage.iter().enumerate() {
+                path.descend(taxon.clone(), depth).unwrap();
+            }
+
+            path.ascend(target_depth).unwrap();
+            assert_eq!(path.lineage, lineage[..=target_depth]);
+            assert_eq!(path.depth, Some(target_depth));
+        }
+    }
+
+    #[test]
+    fn siblings_share_ancestors() {
+        let mut path = LineagePath::new();
+        let genus = taxon("G", "10");
+        path.descend(genus.clone(), 0).unwrap();
+
+        path.descend(taxon("S", "11"), 1).unwrap();
+        path.ascend(0).unwrap();
+        assert_eq!(path.lineage, slice::from_ref(&genus));
+        path.descend(taxon("S", "12"), 1).unwrap();
+        path.ascend(0).unwrap();
+        assert_eq!(path.lineage, [genus]);
+    }
+
+    #[test]
+    fn siblings_below_a_missing_parent_share_the_first_known_ancestor() {
+        let mut path = LineagePath::new();
+        let genus = taxon("G", "10");
+        path.descend(genus.clone(), 3).unwrap();
+        path.descend(taxon("S", "11"), 4).unwrap();
+
+        path.ascend(3).unwrap();
+        assert_eq!(path.lineage, [genus]);
+    }
+
+    #[test]
+    fn changing_branches_replaces_ancestors_below_the_shared_parent() {
+        let mut path = LineagePath::new();
+        let bacteria = taxon("D", "2");
+        let next_genus = taxon("G", "20");
+        path.descend(bacteria.clone(), 0).unwrap();
+        path.descend(taxon("G", "10"), 1).unwrap();
+        path.descend(taxon("S", "11"), 2).unwrap();
+
+        path.ascend(0).unwrap();
+        assert_eq!(path.lineage, slice::from_ref(&bacteria));
+        path.descend(next_genus.clone(), 1).unwrap();
+        path.ascend(1).unwrap();
+        assert_eq!(path.lineage, [bacteria, next_genus]);
+    }
+
+    #[test]
+    fn a_second_top_level_taxon_returns_a_parse_error_without_changing_lineage() {
+        let parser = KrakenReportParser::new();
+        for current_depth in [0, 1] {
+            for (level, taxid) in [("R", "1"), ("D", "3")] {
+                let mut path = LineagePath::new();
+                parser
+                    .parse_entry(b"100\t4\t0\tR\t1\troot", &mut path)
+                    .unwrap();
+                if current_depth == 1 {
+                    parser
+                        .parse_entry(b"100\t4\t0\tD\t2\t  Bacteria", &mut path)
+                        .unwrap();
+                }
+                let lineage = path.lineage.clone();
+                let line = format!("100\t4\t0\t{level}\t{taxid}\tAnother top-level taxon");
+                assert!(matches!(
+                    parser.parse_entry(line.as_bytes(), &mut path),
+                    Err(ParseError(ParseErrorKind::InvalidLineagePath(
+                        LineagePathError::InvalidDescent { current_depth: actual, target_depth: 0 }
+                    ))) if actual == current_depth
+                ));
+                assert_eq!(path.lineage, lineage);
+                assert_eq!(path.depth, Some(current_depth));
+            }
+        }
+    }
+
+    #[test]
+    fn a_missing_immediate_parent_returns_a_parse_error() {
+        for (parent_level, taxid) in [("D", "2"), ("R", "1")] {
+            let parser = KrakenReportParser::new();
+            let mut path = LineagePath::new();
+            let parent = format!("100\t4\t0\t{parent_level}\t{taxid}\tParent");
+            let entry = parser
+                .parse_entry(parent.as_bytes(), &mut path)
+                .unwrap()
+                .unwrap();
+
+            assert!(matches!(
+                parser.parse_entry(b"100\t4\t4\tG\t10\t    Genus", &mut path),
+                Err(ParseError(ParseErrorKind::InvalidLineagePath(
+                    LineagePathError::UnknownDepth { depth: 1 }
+                )))
+            ));
+            assert_eq!(path.lineage, slice::from_ref(entry.taxon()));
+            assert_eq!(path.depth, Some(0));
+        }
+    }
+
+    #[test]
+    fn the_first_taxon_can_start_below_the_top_level() {
+        for hierarchy_depth in [1, 3, usize::MAX - 1] {
+            let mut path = LineagePath::new();
+            let genus = taxon("G", "10");
+
+            path.descend(genus.clone(), hierarchy_depth).unwrap();
+            path.ascend(hierarchy_depth).unwrap();
+            assert_eq!(path.lineage, [genus]);
+        }
+    }
+
+    #[test]
+    fn returning_above_the_first_known_ancestor_returns_a_parse_error() {
+        let parser = KrakenReportParser::new();
+        let mut path = LineagePath::new();
+        path.descend(taxon("G", "10"), 3).unwrap();
+        path.descend(taxon("S", "11"), 4).unwrap();
+
+        assert!(matches!(
+            parser.parse_entry(b"100\t4\t0\tD\t2\t  Bacteria", &mut path),
+            Err(ParseError(ParseErrorKind::InvalidLineagePath(
+                LineagePathError::UnknownDepth { depth: 0 }
+            )))
+        ));
+        assert_eq!(path.lineage, [taxon("G", "10"), taxon("S", "11")]);
+        assert_eq!(path.depth, Some(4));
+    }
+
+    #[test]
+    fn an_indented_first_entry_returns_a_parse_error_without_changing_lineage() {
+        let parser = KrakenReportParser::new();
+        for hierarchy_depth in [1, 3] {
+            let mut path = LineagePath::new();
+            let line = format!("100\t4\t4\tG\t10\t{}Genus", "  ".repeat(hierarchy_depth));
+            assert!(matches!(
+                parser.parse_entry(line.as_bytes(), &mut path),
+                Err(ParseError(ParseErrorKind::InvalidLineagePath(
+                    LineagePathError::UnknownDepth { depth }
+                ))) if depth == hierarchy_depth - 1
+            ));
+            assert!(path.lineage.is_empty());
+            assert_eq!(path.depth, None);
+        }
+    }
+
+    #[test]
+    fn root_taxa_are_excluded_from_descendant_lineages() {
+        for root_level in ["R", "R0"] {
+            let input = format!(
+                "100\t4\t0\t{root_level}\t1\troot\n100\t4\t0\tD\t2\t  Bacteria\n100\t4\t4\tG\t10\t    Genus\n"
+            );
+            let entries = parse(input.as_bytes()).unwrap();
+            assert!(entries[0].lineage().is_empty());
+            assert!(entries[1].lineage().is_empty());
+            assert_eq!(entries[2].lineage(), slice::from_ref(entries[1].taxon()));
+        }
+    }
+
+    #[test]
+    fn root_rank_ancestors_are_excluded_from_lineages() {
+        for minimizers in ["", "20\t5\t"] {
+            let input = format!(
+                "100\t4\t0\t{minimizers}R\t1\troot\n\
+                 100\t4\t0\t{minimizers}R1\t131567\t  cellular organisms\n\
+                 100\t4\t0\t{minimizers}R2\t10\t    Group\n\
+                 100\t4\t0\t{minimizers}D\t2\t      Bacteria\n\
+                 100\t4\t0\t{minimizers}G2\t20\t        Genus group\n\
+                 100\t4\t4\t{minimizers}S\t21\t          Species\n"
+            );
+            let entries = parse(input.as_bytes()).unwrap();
+            assert_eq!(entries.len(), 6);
+            assert!(entries[..4].iter().all(|entry| entry.lineage().is_empty()));
+            assert_eq!(entries[4].lineage(), slice::from_ref(entries[3].taxon()));
+            assert_eq!(
+                entries[5].lineage(),
+                [entries[3].taxon().clone(), entries[4].taxon().clone()]
+            );
+        }
+    }
+
+    #[test]
+    fn root_rank_ancestors_remain_available_for_path_traversal() {
+        let parser = KrakenReportParser::new();
+        let mut path = LineagePath::new();
+        let entries = [
+            "100\t4\t0\tR\t1\troot",
+            "100\t4\t0\tR1\t131567\t  cellular organisms",
+            "100\t4\t0\tR2\t10\t    Group",
+            "100\t4\t4\tD\t2\t      Bacteria",
+        ]
+        .map(|line| {
+            parser
+                .parse_entry(line.as_bytes(), &mut path)
+                .unwrap()
+                .unwrap()
+        });
+        assert_eq!(
+            path.lineage(),
+            &entries
+                .iter()
+                .map(|entry| entry.taxon().clone())
+                .collect::<Vec<_>>()
+        );
+
+        let archaea = parser
+            .parse_entry(b"100\t4\t4\tD\t3\t    Archaea", &mut path)
+            .unwrap()
+            .unwrap();
+        assert!(archaea.lineage().is_empty());
+        assert_eq!(archaea.hierarchy_depth(), 2);
+        assert_eq!(
+            path.lineage(),
+            &[
+                entries[0].taxon().clone(),
+                entries[1].taxon().clone(),
+                archaea.taxon().clone()
+            ]
+        );
+    }
+
+    #[test]
     fn report_hierarchy_is_independent_of_intermediate_rank_depth() {
-        let mut state = LineageState::new();
+        let mut path = LineagePath::new();
         let bacteria = taxon("D", "2");
         let genus = taxon("G2", "10");
-        state.advance(&bacteria, 0);
+        path.descend(bacteria.clone(), 0).unwrap();
 
-        assert_eq!(state.advance(&genus, 1), slice::from_ref(&bacteria));
-        assert_eq!(state.advance(&taxon("S", "11"), 2), [bacteria, genus]);
+        path.ascend(0).unwrap();
+        assert_eq!(path.lineage, slice::from_ref(&bacteria));
+        path.descend(genus.clone(), 1).unwrap();
+        path.ascend(1).unwrap();
+        assert_eq!(path.lineage, [bacteria, genus]);
     }
 }

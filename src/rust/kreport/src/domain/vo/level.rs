@@ -129,7 +129,9 @@ impl TaxonLevel {
         if depth.is_empty() {
             return Ok(Self::new(rank));
         }
-        // Integer parsing accepts a leading '+' and leading zeros; rank depths do not.
+        // A single zero is valid and means no intermediate level. Reject a '+'
+        // and multi-digit leading zeros before integer parsing accepts them;
+        // parsing the u8 below rejects other invalid characters and overflow.
         if depth.starts_with('+') || (depth.len() > 1 && depth.starts_with('0')) {
             return Err(TaxonLevelParseError::InvalidDepthFormat);
         }
@@ -155,9 +157,20 @@ impl TaxonLevel {
         self.rank == Rank::Unclassified
     }
 
-    /// Whether the major rank is root, with or without an intermediate level.
-    /// For example, this includes both `R` and `R1`.
+    /// Whether this level denotes the root of the taxonomic hierarchy.
+    /// The root is represented by `R` or its equivalent `R0`.
+    ///
+    /// See [`Self::is_root_rank`] to also match intermediate levels such as `R1` and `R2`.
     pub fn is_root(&self) -> bool {
+        // Intermediate depths count levels below the nearest major rank; R1 is not the root.
+        self.is_root_rank() && self.depth == 0
+    }
+
+    /// Whether the major rank is root, with or without an intermediate level.
+    /// For example, this includes `R`, `R0`, `R1` and `R2`.
+    ///
+    /// See [`Self::is_root`] to match only the root itself (`R` or `R0`).
+    pub fn is_root_rank(&self) -> bool {
         self.rank == Rank::Root
     }
 }
@@ -165,6 +178,7 @@ impl TaxonLevel {
 impl fmt::Display for TaxonLevel {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{}", self.rank.abbre())?;
+        // Normalize equivalent inputs such as G and G0 to the same representation.
         if self.depth != 0 {
             write!(formatter, "{}", self.depth)?;
         }
@@ -279,8 +293,37 @@ mod tests {
     }
 
     #[test]
-    fn root_check_accepts_intermediate_depths() {
-        assert!(TaxonLevel::parse("R1").unwrap().is_root());
+    fn root_check_accepts_root_without_an_intermediate_depth() {
+        for level in ["R", "R0"] {
+            assert!(TaxonLevel::parse(level).unwrap().is_root(), "{level}");
+        }
+    }
+
+    #[test]
+    fn root_check_rejects_intermediate_depths() {
+        for level in ["R1", "R2", "R255"] {
+            assert!(!TaxonLevel::parse(level).unwrap().is_root(), "{level}");
+        }
+    }
+
+    #[test]
+    fn root_rank_check_accepts_root_and_intermediate_depths() {
+        for level in ["R", "R0", "R1", "R2", "R255"] {
+            assert!(TaxonLevel::parse(level).unwrap().is_root_rank(), "{level}");
+        }
+    }
+
+    #[test]
+    fn root_rank_check_rejects_other_ranks() {
+        for rank in ["U", "D", "K", "P", "C", "O", "F", "G", "S"] {
+            for depth in ["", "0", "1", "2", "255"] {
+                let level = format!("{rank}{depth}");
+                assert!(
+                    !TaxonLevel::parse(&level).unwrap().is_root_rank(),
+                    "{level}"
+                );
+            }
+        }
     }
 
     #[test]

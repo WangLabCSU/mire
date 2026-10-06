@@ -3,7 +3,9 @@
 //! Use [`load_kreport`] to collect a report from an input source, or
 //! [`KrakenReportReader`] to read entries one at a time.
 //! Both support six- and eight-column reports, preserve report order and retain
-//! ancestor lineages. Blank and unclassified rows are skipped.
+//! ancestor lineages without the current taxon or ancestors whose major rank is
+//! root, such as `R`, `R1` and `R2`.
+//! Blank and unclassified rows are skipped.
 //! Create selection conditions with [`TaxonSpec`] and inspect the returned
 //! [`KrakenReport`] or [`KrakenReportEntry`] values. Reading failures return [`Error`].
 //!
@@ -40,8 +42,8 @@ mod error;
 mod reader;
 
 pub use self::domain::{
-    KrakenReport, KrakenReportEntry, KrakenReportEntryParts, ParseError, Rank, Taxid, Taxon,
-    TaxonLevel, TaxonSpec, TaxonSpecParseError,
+    EntrySpec, EntrySpecScope, KrakenReport, KrakenReportEntry, KrakenReportEntryParts, ParseError,
+    Rank, Taxid, Taxon, TaxonLevel, TaxonSpec, TaxonSpecParseError,
 };
 pub use self::error::Error;
 pub use self::reader::{load_kreport, Entries, KrakenReportReader};
