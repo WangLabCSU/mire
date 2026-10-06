@@ -58,7 +58,6 @@ pub struct KrakenReportEntry {
     distinct_minimizer_count: Option<usize>,
     taxon: Taxon,
     lineage: Vec<Taxon>,
-    hierarchy_depth: usize,
 }
 
 /// The owned abundance, taxon and lineage values of a report entry.
@@ -78,13 +77,10 @@ pub struct KrakenReportEntryParts {
     /// Ancestors in report order, excluding this taxon and ancestors whose major
     /// rank is root, such as `R`, `R1` and `R2`.
     pub lineage: Vec<Taxon>,
-    /// Depth in the reported taxonomic hierarchy.
-    pub hierarchy_depth: usize,
 }
 
 impl KrakenReportEntry {
-    // Construct an entry with an ancestor-only lineage and its hierarchy depth.
-    #[allow(clippy::too_many_arguments)]
+    // Construct an entry with an ancestor-only lineage.
     pub(crate) fn new(
         percentage: f64,
         clade_reads: usize,
@@ -93,7 +89,6 @@ impl KrakenReportEntry {
         distinct_minimizer_count: Option<usize>,
         taxon: Taxon,
         lineage: Vec<Taxon>,
-        hierarchy_depth: usize,
     ) -> Self {
         Self {
             percentage,
@@ -103,7 +98,6 @@ impl KrakenReportEntry {
             distinct_minimizer_count,
             taxon,
             lineage,
-            hierarchy_depth,
         }
     }
 
@@ -128,11 +122,6 @@ impl KrakenReportEntry {
         &self.lineage
     }
 
-    /// Depth in the reported taxonomic hierarchy.
-    pub fn hierarchy_depth(&self) -> usize {
-        self.hierarchy_depth
-    }
-
     /// Consume the entry into its owned report fields.
     pub fn into_parts(self) -> KrakenReportEntryParts {
         KrakenReportEntryParts {
@@ -143,7 +132,6 @@ impl KrakenReportEntry {
             distinct_minimizer_count: self.distinct_minimizer_count,
             taxon: self.taxon,
             lineage: self.lineage,
-            hierarchy_depth: self.hierarchy_depth,
         }
     }
 }
@@ -185,7 +173,6 @@ mod tests {
                 Some(7),
                 genus.clone(),
                 vec![bacteria.clone()],
-                2,
             ),
             KrakenReportEntry::new(
                 50.0,
@@ -195,7 +182,6 @@ mod tests {
                 None,
                 taxon("S", "11", "Species A"),
                 vec![bacteria.clone(), genus.clone()],
-                3,
             ),
             KrakenReportEntry::new(
                 50.0,
@@ -205,7 +191,6 @@ mod tests {
                 None,
                 taxon("S", "12", "Species B"),
                 vec![bacteria, genus],
-                3,
             ),
         ];
         let report = KrakenReport::new(entries.clone());
@@ -248,7 +233,6 @@ mod tests {
                 distinct_minimizers,
                 genus.clone(),
                 lineage.clone(),
-                1,
             );
             let parts = entry.into_parts();
             assert_eq!(parts.percentage, 100.0);
@@ -258,7 +242,6 @@ mod tests {
             assert_eq!(parts.distinct_minimizer_count, distinct_minimizers);
             assert_eq!(parts.taxon, genus);
             assert_eq!(parts.lineage, lineage);
-            assert_eq!(parts.hierarchy_depth, 1);
         }
     }
 }

@@ -739,11 +739,10 @@ mod tests {
             let mut reader = KrakenReportReader::with_capacity(capacity, Cursor::new(input));
             let root = reader.read_entry().unwrap().unwrap();
             assert_eq!(root.taxon().taxid().as_str(), "1");
-            assert_eq!(root.hierarchy_depth(), 0);
             assert!(root.lineage().is_empty());
             assert_eq!(reader.offset(), 2);
             let bacteria = reader.read_entry().unwrap().unwrap();
-            assert_eq!(bacteria.hierarchy_depth(), 1);
+            assert_eq!(bacteria.taxon().taxid().as_str(), "2");
             assert!(bacteria.lineage().is_empty());
             assert_eq!(bacteria.minimizer_count(), Some(30));
             assert_eq!(bacteria.distinct_minimizer_count(), Some(7));

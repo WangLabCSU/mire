@@ -256,7 +256,7 @@ mod tests {
                 term.to_owned(),
             )
         });
-        KrakenReportEntry::new(100.0, 4, 4, None, None, species, vec![bacteria, genus], 2)
+        KrakenReportEntry::new(100.0, 4, 4, None, None, species, vec![bacteria, genus])
     }
 
     fn taxon_specs(labels: &[&str]) -> HashSet<TaxonSpec> {

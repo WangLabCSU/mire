@@ -258,7 +258,6 @@ impl KrakenReportParser {
                 distinct_minimizer_count,
                 taxon,
                 lineage,
-                hierarchy_depth,
             )))
         } else {
             // Skip the unclassified row only after all statistics are validated.
@@ -380,7 +379,7 @@ mod tests {
     }
 
     #[test]
-    fn skips_unclassified_rows_and_preserves_hierarchy_depths() {
+    fn skips_unclassified_rows_and_preserves_classified_order() {
         let entries = parse(
             b"20.00\t2\t2\tU\t0\tunclassified\n\
              100.00\t10\t0\tR\t1\troot\n\
@@ -395,9 +394,9 @@ mod tests {
         assert_eq!(
             entries
                 .iter()
-                .map(KrakenReportEntry::hierarchy_depth)
+                .map(|entry| entry.taxon().taxid().as_str())
                 .collect::<Vec<_>>(),
-            [0, 1, 2]
+            ["1", "2", "562"]
         );
         assert_eq!(entries[2].taxon().term(), "Escherichia coli");
     }
@@ -958,7 +957,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(archaea.lineage().is_empty());
-        assert_eq!(archaea.hierarchy_depth(), 2);
+        assert_eq!(path.depth, Some(2));
         assert_eq!(
             path.lineage(),
             &[
