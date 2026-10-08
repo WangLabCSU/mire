@@ -1,4 +1,4 @@
-//! Read Kraken reports and select taxa with their descendants.
+//! Read Kraken reports and select taxonomic entries.
 //!
 //! Use [`load_kreport`] to collect a report from an input source, or
 //! [`KrakenReportReader`] to read entries one at a time.
@@ -6,8 +6,10 @@
 //! ancestor lineages without the current taxon or ancestors whose major rank is
 //! root, such as `R`, `R1` and `R2`.
 //! Blank and unclassified rows are skipped.
-//! Create selection conditions with [`TaxonSpec`] and inspect the returned
-//! [`KrakenReport`] or [`KrakenReportEntry`] values. Reading failures return [`Error`].
+//! Create taxon conditions with [`TaxonSpec`]. For [`KrakenReportReader`], combine
+//! them with [`EntrySpec::new`] to match the entry's taxon or its ancestors.
+//! Use [`EntrySpec::with_scope`] to choose a different matching scope. Inspect the
+//! returned [`KrakenReport`] or [`KrakenReportEntry`] values. Reading failures return [`Error`].
 //!
 //! Read a report file and select bacteria and their descendants:
 //!

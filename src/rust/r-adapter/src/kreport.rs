@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Read;
 
 use extendr_api::prelude::*;
-use kreport::{Error as ReportError, KrakenReportReader};
+use kreport::{EntrySpec, Error as ReportError, KrakenReportReader};
 
 use super::values::{strings_arg, u8_to_list_rstr, u8_to_rstr};
 
@@ -142,7 +142,8 @@ fn read_kreport(kreport: &str, taxonomy: Robj) -> std::result::Result<List, Stri
         .collect::<std::result::Result<_, _>>()
         .map_err(|error| format!("select taxonomy: {error}"))?;
     let input = File::open(kreport).map_err(|error| format!("open '{kreport}': {error}"))?;
-    let reader = KrakenReportReader::with_filters(filters, input);
+    let entry_spec = EntrySpec::new(filters);
+    let reader = KrakenReportReader::with_entry_spec(entry_spec, input);
     let table = RKrakenReportTable::read(reader)
         .map_err(|error| format!("kraken report '{kreport}': {error}"))?;
     Ok(table.into_r_list())

@@ -35,9 +35,9 @@ dependency on a business member and handles no biological format or policy.
 ## Reading Kraken reports
 
 The two application services are `load_kreport` and `KrakenReportReader`.
-Their inputs, results and errors are public types: use `TaxonSpec` for selection
-conditions, `KrakenReport` and `KrakenReportEntry` for results, and `Error` for
-reading failures.
+Their inputs, results and errors are public types: use `TaxonSpec` for taxon
+conditions, `EntrySpec` to choose which entries to read, `KrakenReport` and
+`KrakenReportEntry` for results, and `Error` for reading failures.
 Use `load_kreport` to collect a report from an input source. Pass an empty set of
 conditions for all classified taxa, or parse conditions with `TaxonSpec::parse`
 to include matching taxa and their descendants:
@@ -58,15 +58,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 Use `KrakenReportReader` for an existing input source. `new` reads all classified
-entries; `with_filters` accepts the same conditions:
+entries; `with_entry_spec` accepts an `EntrySpec`. To match only the entry's taxon,
+use `EntrySpec::with_scope(taxon_specs, EntrySpecScope::Taxon)`.
+`EntrySpec::new` defaults to `EntrySpecScope::Lineage`, matching the entry's
+taxon or its ancestors:
 
 ```rust
-use kreport::{KrakenReportReader, TaxonSpec};
+use kreport::{EntrySpec, KrakenReportReader, TaxonSpec};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input = b"100\t2\t2\tD\t2\tBacteria\n";
-    let filters = [TaxonSpec::parse("D__Bacteria".into())?].into_iter().collect();
-    let mut reader = KrakenReportReader::with_filters(filters, input.as_slice());
+    let taxon_specs = [TaxonSpec::parse("D__Bacteria".into())?].into_iter().collect();
+    let entry_spec = EntrySpec::new(taxon_specs);
+    let mut reader = KrakenReportReader::with_entry_spec(entry_spec, input.as_slice());
     while let Some(entry) = reader.read_entry()? {
         println!("{}", entry.taxon().term());
     }
@@ -116,8 +120,11 @@ Use `TaxonSpec::parse` or `try_into()` to create conditions for either service:
 | `G__Genus group` | That name at genus or an intermediate level below genus |
 | `G2__Genus group` | That name exactly two levels below genus |
 
-Report selection includes entries whose taxon or an ancestor in their lineage
-matches any condition.
+`load_kreport` includes entries whose taxon or an ancestor in their lineage
+matches any condition. With `KrakenReportReader`, choose that behavior through
+`EntrySpecScope::Lineage`, or use `EntrySpecScope::Taxon` to match only the entry's
+taxon. For example, selecting a genus with `Taxon` returns that genus; `Lineage`
+also returns its descendants.
 Full rank names are case-sensitive. `Genus` selects a rank; use `G__Genus` to
 select taxa named `Genus` at that rank or its intermediate levels.
 Unrecognized levels and incomplete conditions, such as `G256`, `X__name` and

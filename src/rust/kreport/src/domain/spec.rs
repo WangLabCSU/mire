@@ -24,7 +24,21 @@ pub struct EntrySpec {
 }
 
 impl EntrySpec {
-    pub fn new(taxon_specs: HashSet<TaxonSpec>, scope: EntrySpecScope) -> Self {
+    /// Select entries whose taxon or an ancestor matches any condition.
+    /// No conditions select all entries.
+    pub fn new(taxon_specs: HashSet<TaxonSpec>) -> Self {
+        Self::with_scope(taxon_specs, EntrySpecScope::Lineage)
+    }
+
+    /// Select entries using the given conditions and taxonomic scope.
+    /// No conditions select all entries.
+    ///
+    /// ```
+    /// use kreport::{EntrySpec, EntrySpecScope, Rank, TaxonSpec};
+    /// let conditions = [TaxonSpec::from(Rank::Genus)].into_iter().collect();
+    /// let spec = EntrySpec::with_scope(conditions, EntrySpecScope::Taxon);
+    /// ```
+    pub fn with_scope(taxon_specs: HashSet<TaxonSpec>, scope: EntrySpecScope) -> Self {
         Self { taxon_specs, scope }
     }
 
@@ -270,7 +284,7 @@ mod tests {
     fn entry_selection_includes_entries_without_conditions() {
         let entry = species_entry();
         for scope in [EntrySpecScope::Taxon, EntrySpecScope::Lineage] {
-            let spec = EntrySpec::new(HashSet::default(), scope);
+            let spec = EntrySpec::with_scope(HashSet::default(), scope);
             assert!(spec.is_satisfied_by(&entry), "scope: {scope:?}");
         }
     }
@@ -279,16 +293,16 @@ mod tests {
     fn entry_selection_matches_the_entry_taxon() {
         let entry = species_entry();
         for scope in [EntrySpecScope::Taxon, EntrySpecScope::Lineage] {
-            let spec = EntrySpec::new(taxon_specs(&["11"]), scope);
+            let spec = EntrySpec::with_scope(taxon_specs(&["11"]), scope);
             assert!(spec.is_satisfied_by(&entry), "scope: {scope:?}");
         }
     }
 
     #[test]
-    fn entry_selection_includes_descendants_of_selected_ancestors() {
+    fn default_entry_selection_includes_descendants_of_selected_ancestors() {
         let entry = species_entry();
         for taxid in ["2", "10"] {
-            let spec = EntrySpec::new(taxon_specs(&[taxid]), EntrySpecScope::Lineage);
+            let spec = EntrySpec::new(taxon_specs(&[taxid]));
             assert!(spec.is_satisfied_by(&entry), "{taxid}");
         }
     }
@@ -297,7 +311,7 @@ mod tests {
     fn entry_selection_can_exclude_descendants() {
         let entry = species_entry();
         for taxid in ["2", "10"] {
-            let spec = EntrySpec::new(taxon_specs(&[taxid]), EntrySpecScope::Taxon);
+            let spec = EntrySpec::with_scope(taxon_specs(&[taxid]), EntrySpecScope::Taxon);
             assert!(!spec.is_satisfied_by(&entry), "{taxid}");
         }
     }
@@ -309,7 +323,7 @@ mod tests {
             (EntrySpecScope::Taxon, ["12", "11"]),
             (EntrySpecScope::Lineage, ["12", "2"]),
         ] {
-            let spec = EntrySpec::new(taxon_specs(&labels), scope);
+            let spec = EntrySpec::with_scope(taxon_specs(&labels), scope);
             assert!(spec.is_satisfied_by(&entry), "scope: {scope:?}");
         }
     }
@@ -318,7 +332,7 @@ mod tests {
     fn entry_selection_excludes_unrelated_taxa() {
         let entry = species_entry();
         for scope in [EntrySpecScope::Taxon, EntrySpecScope::Lineage] {
-            let spec = EntrySpec::new(taxon_specs(&["12", "3"]), scope);
+            let spec = EntrySpec::with_scope(taxon_specs(&["12", "3"]), scope);
             assert!(!spec.is_satisfied_by(&entry), "scope: {scope:?}");
         }
     }

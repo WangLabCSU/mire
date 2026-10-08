@@ -6,8 +6,7 @@ use memchr::memchr;
 use rustc_hash::FxHashSet as HashSet;
 
 use crate::domain::{
-    EntrySpec, EntrySpecScope, KrakenReport, KrakenReportEntry, KrakenReportParser, LineagePath,
-    TaxonSpec,
+    EntrySpec, KrakenReport, KrakenReportEntry, KrakenReportParser, LineagePath, TaxonSpec,
 };
 use crate::error::Error;
 
@@ -51,14 +50,15 @@ pub fn load_kreport<R: Read>(
     reader: R,
     filters: HashSet<TaxonSpec>,
 ) -> Result<KrakenReport, Error> {
-    let mut reader = KrakenReportReader::with_filters(filters, reader);
+    let entry_spec = EntrySpec::new(filters);
+    let mut reader = KrakenReportReader::with_entry_spec(entry_spec, reader);
     let entries = reader.entries().collect::<Result<Vec<_>, Error>>()?;
     Ok(KrakenReport::new(entries))
 }
 
 /// Read Kraken report entries with their ancestor lineages.
 ///
-/// Conditions match an entry's taxon or an ancestor in its lineage.
+/// Use an [`EntrySpec`] to select entries by their taxon or ancestor lineage.
 /// Ancestor lineages omit the current taxon and ancestors whose major rank is
 /// root, such as `R`, `R1` and `R2`.
 /// With no conditions, all classified entries are returned, including root entries.
@@ -84,23 +84,26 @@ impl<R: Read> KrakenReportReader<R> {
 
     /// Create a reader for all classified entries, including root entries.
     pub fn new(reader: R) -> Self {
-        Self::with_capacity_and_filters(Self::BUFFER_SIZE, HashSet::default(), reader)
+        Self::with_capacity(Self::BUFFER_SIZE, reader)
     }
 
     /// Create an unfiltered reader with the requested input capacity in bytes.
     pub fn with_capacity(capacity: usize, reader: R) -> Self {
-        Self::with_capacity_and_filters(capacity, HashSet::default(), reader)
+        let entry_spec = EntrySpec::new(Default::default());
+        Self::with_capacity_and_entry_spec(capacity, entry_spec, reader)
     }
 
-    /// Create a reader selecting entries by their taxon or ancestor lineage.
-    /// An empty set of conditions leaves the report unrestricted.
+    /// Create a reader selecting entries that satisfy the given entry specification.
+    /// Use [`EntrySpec::new`] to match the entry's taxon or its ancestors, or
+    /// [`EntrySpec::with_scope`] to choose the matching scope.
     ///
     /// ```
-    /// use kreport::KrakenReportReader;
-    /// let filters = ["G__Genus A"].into_iter().map(TryInto::try_into)
+    /// use kreport::{EntrySpec, KrakenReportReader};
+    /// let taxon_specs = ["G__Genus A"].into_iter().map(TryInto::try_into)
     ///     .collect::<Result<_, _>>()?;
+    /// let entry_spec = EntrySpec::new(taxon_specs);
     /// let input = b"100\t4\t0\tD\t2\tBacteria\n100\t4\t0\tG\t10\t  Genus A\n100\t4\t4\tS\t11\t    Species A\n";
-    /// let mut reader = KrakenReportReader::with_filters(filters, input.as_slice());
+    /// let mut reader = KrakenReportReader::with_entry_spec(entry_spec, input.as_slice());
     /// let genus = reader.read_entry()?.unwrap();
     /// assert_eq!(genus.taxon().term(), "Genus A");
     /// assert_eq!(genus.lineage()[0].term(), "Bacteria");
@@ -108,22 +111,18 @@ impl<R: Read> KrakenReportReader<R> {
     /// assert!(reader.read_entry()?.is_none());
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn with_filters(filters: HashSet<TaxonSpec>, reader: R) -> Self {
-        Self::with_capacity_and_filters(Self::BUFFER_SIZE, filters, reader)
+    pub fn with_entry_spec(entry_spec: EntrySpec, reader: R) -> Self {
+        Self::with_capacity_and_entry_spec(Self::BUFFER_SIZE, entry_spec, reader)
     }
 
-    /// Select entries by their taxon or ancestor lineage with the requested input capacity in bytes.
-    /// An empty set of conditions leaves the report unrestricted.
-    pub fn with_capacity_and_filters(
-        capacity: usize,
-        taxon_specs: HashSet<TaxonSpec>,
-        reader: R,
-    ) -> Self {
+    /// Create a reader selecting entries that satisfy the given entry specification,
+    /// with the requested input capacity in bytes.
+    pub fn with_capacity_and_entry_spec(capacity: usize, entry_spec: EntrySpec, reader: R) -> Self {
         Self {
             reader: LineReader::with_capacity(capacity, reader),
             parser: KrakenReportParser::new(),
             path: LineagePath::with_capacity(10),
-            entry_spec: EntrySpec::new(taxon_specs, EntrySpecScope::Lineage),
+            entry_spec,
         }
     }
 
@@ -312,6 +311,7 @@ mod tests {
     use std::{error::Error as _, io::Cursor};
 
     use super::*;
+    use crate::domain::EntrySpecScope;
 
     const FILTER_REPORT: &[u8] = b"0\t0\t0\tU\t0\tunclassified\n100\t4\t0\tR\t1\troot\n100\t4\t0\tD\t2\t  Bacteria\n100\t4\t0\tG2\t10\t    Genus A\n50\t2\t2\tS\t11\t      Species A\n50\t2\t2\tS\t12\t      Species B\n100\t4\t0\tG\t20\t    Genus B\n100\t4\t4\tS\t21\t      Species C\n100\t4\t0\tD\t3\t  Archaea\n100\t4\t4\tS\t31\t    Species D\n";
 
@@ -320,6 +320,50 @@ mod tests {
             .iter()
             .map(|label| TaxonSpec::parse((*label).into()).unwrap())
             .collect()
+    }
+
+    #[test]
+    fn taxon_scope_selects_only_matching_taxa_and_preserves_their_lineages() {
+        let entry_spec = EntrySpec::with_scope(filters(&["10", "12"]), EntrySpecScope::Taxon);
+        let mut reader = KrakenReportReader::with_entry_spec(entry_spec, FILTER_REPORT);
+        let entries = reader.entries().collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| entry.taxon().taxid().as_str())
+                .collect::<Vec<_>>(),
+            ["10", "12"]
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| entry
+                    .lineage()
+                    .iter()
+                    .map(|taxon| taxon.taxid().as_str())
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+            [vec!["2"], vec!["2", "10"]]
+        );
+    }
+
+    #[test]
+    fn taxon_scope_selection_is_independent_of_input_capacity() {
+        for capacity in [0, 1, 17, FILTER_REPORT.len()] {
+            let entry_spec = EntrySpec::with_scope(filters(&["10"]), EntrySpecScope::Taxon);
+            let mut reader = KrakenReportReader::with_capacity_and_entry_spec(
+                capacity,
+                entry_spec,
+                FILTER_REPORT,
+            );
+            let entry = reader.read_entry().unwrap().unwrap();
+            assert_eq!(entry.taxon().taxid().as_str(), "10");
+            assert!(
+                reader.read_entry().unwrap().is_none(),
+                "capacity {capacity}"
+            );
+            assert_eq!(reader.offset(), 10);
+        }
     }
 
     #[test]
@@ -374,8 +418,10 @@ mod tests {
                  {invalid_statistics}G\t20\t  Genus B\n\
                  50\t2\t2\t{minimizers}S\t21\t    Species B\n"
             );
-            let mut previous_branch =
-                KrakenReportReader::with_filters(filters(&["10"]), input.as_bytes());
+            let mut previous_branch = KrakenReportReader::with_entry_spec(
+                EntrySpec::new(filters(&["10"])),
+                input.as_bytes(),
+            );
             assert_eq!(
                 previous_branch
                     .read_entry()
@@ -392,8 +438,10 @@ mod tests {
             ));
             assert!(previous_branch.read_entry().unwrap().is_none());
 
-            let mut current_branch =
-                KrakenReportReader::with_filters(filters(&["20"]), input.as_bytes());
+            let mut current_branch = KrakenReportReader::with_entry_spec(
+                EntrySpec::new(filters(&["20"])),
+                input.as_bytes(),
+            );
             assert!(matches!(
                 current_branch.read_entry(),
                 Err(Error::Parse { line: 3, .. })
@@ -441,21 +489,27 @@ mod tests {
 
     #[test]
     fn empty_filters_preserve_all_classified_entries() {
-        let mut reader = KrakenReportReader::with_filters(HashSet::default(), FILTER_REPORT);
-        let entries = reader.entries().collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(
-            entries
-                .iter()
-                .map(|entry| entry.taxon().taxid().as_str())
-                .collect::<Vec<_>>(),
-            ["1", "2", "10", "11", "12", "20", "21", "3", "31"]
-        );
+        for scope in [EntrySpecScope::Taxon, EntrySpecScope::Lineage] {
+            let entry_spec = EntrySpec::with_scope(HashSet::default(), scope);
+            let mut reader = KrakenReportReader::with_entry_spec(entry_spec, FILTER_REPORT);
+            let entries = reader.entries().collect::<Result<Vec<_>, _>>().unwrap();
+            assert_eq!(
+                entries
+                    .iter()
+                    .map(|entry| entry.taxon().taxid().as_str())
+                    .collect::<Vec<_>>(),
+                ["1", "2", "10", "11", "12", "20", "21", "3", "31"],
+                "{scope:?}"
+            );
+        }
     }
 
     #[test]
     fn filters_preserve_descendants_lineages_and_report_order() {
-        let mut reader =
-            KrakenReportReader::with_filters(filters(&["12", "10", "10"]), FILTER_REPORT);
+        let mut reader = KrakenReportReader::with_entry_spec(
+            EntrySpec::new(filters(&["12", "10", "10"])),
+            FILTER_REPORT,
+        );
         let entries = reader.entries().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(
             entries
@@ -480,7 +534,8 @@ mod tests {
 
     #[test]
     fn selecting_a_leaf_preserves_unselected_ancestors() {
-        let mut reader = KrakenReportReader::with_filters(filters(&["11"]), FILTER_REPORT);
+        let mut reader =
+            KrakenReportReader::with_entry_spec(EntrySpec::new(filters(&["11"])), FILTER_REPORT);
         let entry = reader.read_entry().unwrap().unwrap();
         assert_eq!(entry.taxon().taxid().as_str(), "11");
         assert_eq!(
@@ -497,7 +552,10 @@ mod tests {
     #[test]
     fn root_selection_matches_only_root_rank_entries() {
         for label in ["Root", "R", "1"] {
-            let mut reader = KrakenReportReader::with_filters(filters(&[label]), FILTER_REPORT);
+            let mut reader = KrakenReportReader::with_entry_spec(
+                EntrySpec::new(filters(&[label])),
+                FILTER_REPORT,
+            );
             let entries = reader.entries().collect::<Result<Vec<_>, _>>().unwrap();
             assert_eq!(
                 entries
@@ -567,9 +625,9 @@ mod tests {
                     "{labels:?}, minimizers {minimizers}"
                 );
                 for capacity in [0, 1, 17, input.len()] {
-                    let mut reader = KrakenReportReader::with_capacity_and_filters(
+                    let mut reader = KrakenReportReader::with_capacity_and_entry_spec(
                         capacity,
-                        specs.clone(),
+                        EntrySpec::new(specs.clone()),
                         input.as_bytes(),
                     );
                     let actual = reader.entries().collect::<Result<Vec<_>, _>>().unwrap();
@@ -635,7 +693,10 @@ mod tests {
     #[test]
     fn filtered_reading_propagates_parse_errors_after_unselected_entries() {
         let input = b"100\t4\t0\tD\t2\tBacteria\n\nbroken\n";
-        let mut reader = KrakenReportReader::with_filters(filters(&["999"]), input.as_slice());
+        let mut reader = KrakenReportReader::with_entry_spec(
+            EntrySpec::new(filters(&["999"])),
+            input.as_slice(),
+        );
         assert!(matches!(
             reader.read_entry(),
             Err(Error::Parse {
@@ -664,7 +725,8 @@ mod tests {
             }
         }
         let source = Cursor::new(b"100\t4\t0\tD\t2\tBacteria\n").chain(FailedRead);
-        let mut reader = KrakenReportReader::with_filters(filters(&["999"]), source);
+        let mut reader =
+            KrakenReportReader::with_entry_spec(EntrySpec::new(filters(&["999"])), source);
         assert!(matches!(reader.read_entry(), Err(Error::Read {
             line: 2, source
         }) if source.to_string() == "failed input"));
@@ -775,9 +837,9 @@ mod tests {
             .into_iter()
             .collect::<Vec<_>>();
         for capacity in 1..=input.len() {
-            let mut reader = KrakenReportReader::with_capacity_and_filters(
+            let mut reader = KrakenReportReader::with_capacity_and_entry_spec(
                 capacity,
-                filters(&["Bacteria"]),
+                EntrySpec::new(filters(&["Bacteria"])),
                 input.as_slice(),
             );
             let entries = reader.entries().collect::<Result<Vec<_>, _>>().unwrap();

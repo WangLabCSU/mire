@@ -2,7 +2,7 @@ use std::fs::File;
 use std::path::Path;
 
 use bytes::Bytes;
-use kreport::KrakenReportReader;
+use kreport::{EntrySpec, KrakenReportReader};
 use mire_sequence::{read_fastq, FastqPaths};
 use mire_streaming::{ChunkWriter, LineSource, OrderedExecutor, ProcessingOptions, WorkflowError};
 use rustc_hash::FxHashSet as HashSet;
@@ -56,7 +56,8 @@ pub fn extract_classifications(
         .map_err(|error| WorkflowError::operation("select taxonomy", error))?;
     let input = File::open(request.report)
         .map_err(|error| WorkflowError::operation(format!("open '{}'", request.report), error))?;
-    let reader = KrakenReportReader::with_filters(filters, input);
+    let entry_spec = EntrySpec::new(filters);
+    let reader = KrakenReportReader::with_entry_spec(entry_spec, input);
     let report = read_taxa(reader).map_err(|error| {
         WorkflowError::operation(format!("kraken report '{}'", request.report), error)
     })?;
@@ -110,7 +111,8 @@ pub fn join_reads(request: JoinReadsRequest<'_>, options: ProcessingOptions) -> 
         .map_err(|error| WorkflowError::operation("select taxonomy", error))?;
     let input = File::open(request.report)
         .map_err(|error| WorkflowError::operation(format!("open '{}'", request.report), error))?;
-    let reader = KrakenReportReader::with_filters(filters, input);
+    let entry_spec = EntrySpec::new(filters);
+    let reader = KrakenReportReader::with_entry_spec(entry_spec, input);
     let report = read_taxa(reader).map_err(|error| {
         WorkflowError::operation(format!("kraken report '{}'", request.report), error)
     })?;

@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::path::Path;
 
-use kreport::KrakenReportReader;
+use kreport::{EntrySpec, KrakenReportReader};
 use mire_streaming::{LineSource, OrderedExecutor, WorkflowError};
 
 use super::{application::CountReads, report::read_taxonomy, table::CountTables};
@@ -34,7 +34,8 @@ pub fn count_reads(
         .map_err(|error| WorkflowError::operation("select taxonomy", error))?;
     let input = File::open(request.report)
         .map_err(|error| WorkflowError::operation(format!("open '{}'", request.report), error))?;
-    let reader = KrakenReportReader::with_filters(filters, input);
+    let entry_spec = EntrySpec::new(filters);
+    let reader = KrakenReportReader::with_entry_spec(entry_spec, input);
     let report = read_taxonomy(reader).map_err(|error| {
         WorkflowError::operation(format!("kraken report '{}'", request.report), error)
     })?;

@@ -61,7 +61,10 @@ impl LineagePath {
     /// Returns an error if the new depth is not immediately below the endpoint,
     /// leaving the path unchanged.
     fn descend(&mut self, taxon: Taxon, hierarchy_depth: usize) -> Result<(), LineagePathError> {
-        // Validate before updating either field so a rejected descent preserves the path.
+        // Validate the new taxon's parent before changing lineage or depth,
+        // so an invalid descent leaves the existing path unchanged.
+        // A taxon at hierarchy depth 0 is allowed only when the path is empty
+        // (self.depth is None); it cannot be a child of an existing endpoint.
         if let Some(current_depth) = self.depth {
             // Compare parent depths to reject another top-level taxon without
             // adding to current_depth, which could overflow at usize::MAX.
