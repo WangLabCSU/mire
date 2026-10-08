@@ -186,7 +186,7 @@ impl fmt::Display for TaxonLevel {
     }
 }
 
-// Failures when parsing a taxonomic level.
+/// A taxonomic level could not be parsed.
 #[derive(Error)]
 pub(crate) enum TaxonLevelParseError {
     #[error("Missing taxonomic rank")]

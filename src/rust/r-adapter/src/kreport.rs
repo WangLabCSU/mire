@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Read;
 
 use extendr_api::prelude::*;
-use kreport::{EntrySpec, Error as ReportError, KrakenReportReader};
+use kreport::{EntrySpec, Error as ReportError, KrakenReportReader, ParseError};
 
 use super::values::{strings_arg, u8_to_list_rstr, u8_to_rstr};
 
@@ -26,6 +26,15 @@ impl RKrakenReportTable {
     fn read<R: Read>(mut reader: KrakenReportReader<R>) -> std::result::Result<Self, ReportError> {
         reader
             .entries()
+            .filter(|entry| {
+                !matches!(
+                    entry,
+                    Err(ReportError::Parse {
+                        source: ParseError::EmptyLine | ParseError::Unclassified,
+                        ..
+                    })
+                )
+            })
             .collect::<std::result::Result<Vec<_>, _>>()
             .map(|entries| {
                 let mut table = Self::with_capacity(entries.len());

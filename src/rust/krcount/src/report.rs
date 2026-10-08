@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use bytes::Bytes;
-use kreport::{Error, KrakenReportReader};
+use kreport::{Error, KrakenReportReader, ParseError};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 pub(crate) struct ReportTaxonomy {
@@ -17,6 +17,15 @@ pub(crate) fn read_taxonomy<R: Read>(
 ) -> Result<ReportTaxonomy, Error> {
     reader
         .entries()
+        .filter(|entry| {
+            !matches!(
+                entry,
+                Err(Error::Parse {
+                    source: ParseError::EmptyLine | ParseError::Unclassified,
+                    ..
+                })
+            )
+        })
         .collect::<Result<Vec<_>, _>>()
         .map(|entries| {
             let taxids = entries

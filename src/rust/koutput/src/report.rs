@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use kreport::{Error, KrakenReportReader};
+use kreport::{Error, KrakenReportReader, ParseError};
 
 pub(crate) struct ReportTaxon {
     pub(crate) taxid: String,
@@ -15,6 +15,15 @@ pub(crate) fn read_taxa<R: Read>(
 ) -> Result<Vec<ReportTaxon>, Error> {
     reader
         .entries()
+        .filter(|entry| {
+            !matches!(
+                entry,
+                Err(Error::Parse {
+                    source: ParseError::EmptyLine | ParseError::Unclassified,
+                    ..
+                })
+            )
+        })
         .map(|entry| {
             entry.map(|entry| ReportTaxon {
                 taxid: entry.taxon().taxid().as_str().to_owned(),

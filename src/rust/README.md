@@ -84,8 +84,13 @@ Use `reader.entries()` to obtain an `Entries` iterator over the remaining select
 entries. Each item is a `Result<KrakenReportEntry, Error>`; collect the remaining
 entries with `reader.entries().collect::<Result<Vec<_>, _>>()?`.
 
-Both support six- and eight-column reports and preserve report order. Blank and
-unclassified rows are skipped. An entry's `lineage()` contains its taxon's ancestors,
+Both support six- and eight-column reports and preserve report order.
+`load_kreport` skips blank and unclassified rows. `KrakenReportReader` returns
+`Error::Parse` for these rows; match its `source` against `ParseError::EmptyLine`
+or `ParseError::Unclassified` to identify them and continue reading.
+Malformed unclassified rows return their field validation error.
+
+An entry's `lineage()` contains its taxon's ancestors,
 excluding the taxon itself and ancestors whose major rank is root, such as `R`,
 `R1` and `R2`. Other ancestors, including intermediate levels such as `G2`, remain
 in the lineage even when they are not selected. Taxid `1` selects the root entry
@@ -152,8 +157,12 @@ leading zeros (`G00`, `G02`) are rejected.
 Invalid conditions return `TaxonSpecParseError` before reading starts. Opening
 an input file is handled by the caller. Report reading and parsing failures
 return `Error::Read` or `Error::Parse`, with the report line. The latter carries
-a `ParseError` describing the failed entry. Use `?` to propagate errors, match
-variants for separate handling, and `std::error::Error::source()` to inspect causes.
+a `ParseError`: `EmptyLine` for a blank line, `Unclassified` for a valid
+unclassified row, or `InvalidEntry` for an invalid report entry.
+`InvalidEntry` carries an `InvalidEntryError`; display it for diagnostic details
+and use `std::error::Error::source()` to inspect its underlying cause, when available.
+Use `?` to propagate errors or match variants for separate handling, with a
+wildcard arm for future categories.
 
 An empty filter set includes all classified taxa. If no classified entries match,
 `load_kreport` returns an empty report; check `report.is_empty()` for this outcome.

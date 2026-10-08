@@ -5,7 +5,8 @@
 //! Both support six- and eight-column reports, preserve report order and retain
 //! ancestor lineages without the current taxon or ancestors whose major rank is
 //! root, such as `R`, `R1` and `R2`.
-//! Blank and unclassified rows are skipped.
+//! [`load_kreport`] skips blank and unclassified rows. [`KrakenReportReader`]
+//! returns parsing errors for these rows and supports continuing with the next line.
 //! Create taxon conditions with [`TaxonSpec`] and combine them with
 //! [`EntrySpec::new`] to match the entry's taxon or its ancestors.
 //! Use [`EntrySpec::with_scope`] to choose a different matching scope. Inspect the
@@ -38,15 +39,16 @@
 //! }
 //! # Ok::<(), kreport::Error>(())
 //! ```
-#![deny(unreachable_pub)]
+#![deny(unnameable_types, unreachable_pub)]
 
 mod domain;
 mod error;
 mod reader;
 
 pub use self::domain::{
-    EntrySpec, EntrySpecScope, KrakenReport, KrakenReportEntry, KrakenReportEntryParts, ParseError,
-    Rank, Taxid, Taxon, TaxonLevel, TaxonSpec, TaxonSpecParseError,
+    EntrySpec, EntrySpecScope, InvalidEntryError, KrakenReport, KrakenReportEntry,
+    KrakenReportEntryParts, ParseError, Rank, Taxid, Taxon, TaxonLevel, TaxonSpec,
+    TaxonSpecParseError,
 };
 pub use self::error::Error;
 pub use self::reader::{load_kreport, Entries, KrakenReportReader};

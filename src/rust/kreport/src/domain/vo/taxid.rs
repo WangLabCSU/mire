@@ -55,7 +55,7 @@ impl fmt::Display for Taxid {
     }
 }
 
-// Failures when constructing a taxid.
+/// A taxid could not be parsed.
 #[derive(Debug, Error)]
 pub(crate) enum TaxidParseError {
     #[error("Empty taxid")]

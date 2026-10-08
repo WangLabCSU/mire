@@ -81,12 +81,14 @@ impl LineagePath {
     }
 }
 
-// A rejected path operation leaves both its taxa and endpoint depth unchanged.
+/// A taxonomic lineage path could not be traversed.
 #[derive(Debug, thiserror::Error)]
 enum LineagePathError {
+    /// The requested ancestor is not on the path.
     #[error("No taxon at hierarchy depth {depth} in the current lineage")]
     UnknownDepth { depth: usize },
 
+    /// The new taxon is not an immediate child of the path's endpoint.
     #[error("Cannot descend from hierarchy depth {current_depth} to {target_depth}; expected an immediate child")]
     InvalidDescent {
         current_depth: usize,
@@ -106,18 +108,12 @@ impl KrakenReportParser {
         &self,
         line: &[u8],
         path: &mut LineagePath,
-    ) -> Result<Option<KrakenReportEntry>, ParseError> {
+    ) -> Result<KrakenReportEntry, ParseError> {
         // Blank lines carry no hierarchy information and must not alter the path.
         if line.iter().all(|byte| byte.is_ascii_whitespace()) {
-            return Ok(None);
+            return Err(ParseError::EmptyLine);
         }
-        Self::parse_line(line, path).map_err(ParseError)
-    }
 
-    fn parse_line(
-        line: &[u8],
-        path: &mut LineagePath,
-    ) -> Result<Option<KrakenReportEntry>, ParseErrorKind> {
         // Split on tabs to preserve empty fields and the scientific name's
         // indentation; splitting on whitespace would lose both.
         let fields = line.split(|byte| *byte == b'\t').collect::<Vec<_>>();
@@ -173,17 +169,18 @@ impl KrakenReportParser {
                 )
             }
             _ => {
-                return Err(ParseErrorKind::InvalidFieldCount {
+                return Err(EntryFailure::InvalidFieldCount {
                     actual: fields.len(),
-                });
+                }
+                .into());
             }
         };
 
-        level.first().ok_or(ParseErrorKind::MissingLevel)?;
+        level.first().ok_or(EntryFailure::MissingLevel)?;
         let level = Self::parse_text(level, "taxonomic level")?;
 
         if taxid.is_empty() {
-            return Err(ParseErrorKind::MissingTaxid);
+            return Err(EntryFailure::MissingTaxid.into());
         }
         let taxid = Self::parse_text(taxid, "taxid")?;
 
@@ -194,14 +191,14 @@ impl KrakenReportParser {
             .take_while(|byte| **byte == b' ')
             .count();
         if indentation % 2 != 0 {
-            return Err(ParseErrorKind::InvalidTaxonIndentation);
+            return Err(EntryFailure::InvalidTaxonIndentation.into());
         }
         let hierarchy_depth = indentation / 2;
 
         // Remove structural indentation without trimming the scientific name.
         let term = &indented_term[indentation..];
         if term.is_empty() {
-            return Err(ParseErrorKind::MissingTaxonName);
+            return Err(EntryFailure::MissingTaxonName.into());
         }
         let term = Self::parse_text(term, "taxonomic name")?;
 
@@ -235,7 +232,8 @@ impl KrakenReportParser {
             );
             path.descend(taxon.clone(), hierarchy_depth)?;
         } else {
-            // Leave the path unchanged and validate statistics before skipping the row.
+            // Leave the path unchanged, but still validate statistics before
+            // reporting an unclassified row so malformed fields remain errors.
             lineage = None;
         }
 
@@ -252,46 +250,41 @@ impl KrakenReportParser {
         let clade_reads = Self::parse_usize(clade_reads, "clade reads")?;
         let direct_reads = Self::parse_usize(direct_reads, "direct reads")?;
 
-        if let Some(lineage) = lineage {
-            Ok(Some(KrakenReportEntry::new(
-                percentage,
-                clade_reads,
-                direct_reads,
-                minimizer_count,
-                distinct_minimizer_count,
-                taxon,
-                lineage,
-            )))
-        } else {
-            // Skip the unclassified row only after all statistics are validated.
-            Ok(None)
-        }
+        // Report an unclassified row only after all its fields are validated.
+        let lineage = lineage.ok_or(ParseError::Unclassified)?;
+        Ok(KrakenReportEntry::new(
+            percentage,
+            clade_reads,
+            direct_reads,
+            minimizer_count,
+            distinct_minimizer_count,
+            taxon,
+            lineage,
+        ))
     }
 
-    fn parse_text<'a>(value: &'a [u8], field: &'static str) -> Result<&'a str, ParseErrorKind> {
-        str::from_utf8(value).map_err(|source| ParseErrorKind::InvalidUtf8 { field, source })
+    fn parse_text<'a>(value: &'a [u8], field: &'static str) -> Result<&'a str, EntryFailure> {
+        str::from_utf8(value).map_err(|source| EntryFailure::InvalidUtf8 { field, source })
     }
 
-    fn parse_float(value: &[u8], field: &'static str) -> Result<f64, ParseErrorKind> {
+    fn parse_float(value: &[u8], field: &'static str) -> Result<f64, EntryFailure> {
         let value = str::from_utf8(value.trim_ascii())
-            .map_err(|source| ParseErrorKind::InvalidUtf8 { field, source })?;
+            .map_err(|source| EntryFailure::InvalidUtf8 { field, source })?;
+
+        value.parse().map_err(|source| EntryFailure::InvalidFloat {
+            field,
+            value: value.to_owned(),
+            source,
+        })
+    }
+
+    fn parse_usize(value: &[u8], field: &'static str) -> Result<usize, EntryFailure> {
+        let value = str::from_utf8(value.trim_ascii())
+            .map_err(|source| EntryFailure::InvalidUtf8 { field, source })?;
 
         value
             .parse()
-            .map_err(|source| ParseErrorKind::InvalidFloat {
-                field,
-                value: value.to_owned(),
-                source,
-            })
-    }
-
-    fn parse_usize(value: &[u8], field: &'static str) -> Result<usize, ParseErrorKind> {
-        let value = str::from_utf8(value.trim_ascii())
-            .map_err(|source| ParseErrorKind::InvalidUtf8 { field, source })?;
-
-        value
-            .parse()
-            .map_err(|source| ParseErrorKind::InvalidInteger {
+            .map_err(|source| EntryFailure::InvalidInteger {
                 field,
                 value: value.to_owned(),
                 source,
@@ -300,19 +293,81 @@ impl KrakenReportParser {
 }
 
 /// A report entry could not be parsed.
+///
+/// Match the variant to distinguish a blank line, a valid unclassified row,
+/// or an invalid report entry. Display the error for diagnostic details and use
+/// [`std::error::Error::source()`] to inspect its underlying cause, when available.
+///
+/// ```
+/// use kreport::{Error, InvalidEntryError, KrakenReportReader, ParseError};
+///
+/// let mut reader = KrakenReportReader::new(b"broken\n".as_slice());
+/// match reader.read_entry() {
+///     Err(Error::Parse { line, source: ParseError::InvalidEntry(error) }) => {
+///         let error: InvalidEntryError = error;
+///         assert_eq!(line, 1);
+///         assert_eq!(error.to_string(), "Invalid line with 1 fields; expected 6 or 8");
+///     }
+///     result => panic!("expected an invalid entry, got {result:?}"),
+/// }
+/// ```
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum ParseError {
+    /// The report line is blank.
+    #[error("Empty report line")]
+    EmptyLine,
+
+    /// The row describes unclassified reads and has valid report fields.
+    #[error("Report row describes unclassified reads")]
+    Unclassified,
+
+    /// The report entry is invalid.
+    #[error(transparent)]
+    InvalidEntry(#[from] InvalidEntryError),
+}
+
+/// Details of an invalid Kraken report entry.
+///
+/// Display this error for the failure message. Use
+/// [`std::error::Error::source()`] to inspect the underlying cause, when available.
 #[derive(thiserror::Error)]
 #[error(transparent)]
-pub struct ParseError(ParseErrorKind);
+pub struct InvalidEntryError(EntryFailure);
 
-impl fmt::Debug for ParseError {
+impl fmt::Debug for InvalidEntryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&self.0, formatter)
     }
 }
 
-// Failures produced while decoding and assembling a Kraken2 report.
+impl From<EntryFailure> for ParseError {
+    fn from(error: EntryFailure) -> Self {
+        Self::InvalidEntry(InvalidEntryError(error))
+    }
+}
+
+impl From<TaxonLevelParseError> for ParseError {
+    fn from(error: TaxonLevelParseError) -> Self {
+        EntryFailure::from(error).into()
+    }
+}
+
+impl From<TaxidParseError> for ParseError {
+    fn from(error: TaxidParseError) -> Self {
+        EntryFailure::from(error).into()
+    }
+}
+
+impl From<LineagePathError> for ParseError {
+    fn from(error: LineagePathError) -> Self {
+        EntryFailure::from(error).into()
+    }
+}
+
+// Keep detailed failures typed without exposing them as public classifications.
 #[derive(Debug, thiserror::Error)]
-enum ParseErrorKind {
+enum EntryFailure {
     #[error("Invalid line with {actual} fields; expected 6 or 8")]
     InvalidFieldCount { actual: usize },
 
@@ -366,8 +421,8 @@ mod tests {
     use std::slice;
 
     use super::{
-        KrakenReportEntry, KrakenReportParser, LineagePath, LineagePathError, ParseError,
-        ParseErrorKind, Taxid, Taxon, TaxonLevel,
+        EntryFailure, InvalidEntryError, KrakenReportEntry, KrakenReportParser, LineagePath,
+        LineagePathError, ParseError, Taxid, Taxon, TaxonLevel,
     };
 
     fn parse(contents: &[u8]) -> Result<Vec<KrakenReportEntry>, ParseError> {
@@ -377,15 +432,14 @@ mod tests {
             .strip_suffix(b"\n")
             .unwrap_or(contents)
             .split(|byte| *byte == b'\n')
-            .filter_map(|line| parser.parse_entry(line, &mut path).transpose())
+            .map(|line| parser.parse_entry(line, &mut path))
             .collect()
     }
 
     #[test]
-    fn skips_unclassified_rows_and_preserves_classified_order() {
+    fn classified_rows_preserve_report_order() {
         let entries = parse(
-            b"20.00\t2\t2\tU\t0\tunclassified\n\
-             100.00\t10\t0\tR\t1\troot\n\
+            b"100.00\t10\t0\tR\t1\troot\n\
              100.00\t10\t1\tD\t2\t  Bacteria\n\
              50.00\t5\t5\tS\t562\t    Escherichia coli\n",
         )
@@ -405,16 +459,16 @@ mod tests {
     }
 
     #[test]
-    fn unclassified_rows_return_no_entry() {
+    fn unclassified_rows_return_unclassified_errors() {
         let parser = KrakenReportParser::new();
         let mut path = LineagePath::new();
         for minimizers in ["", "20\t5\t"] {
             for level in ["U", "U1"] {
                 let line = format!("20\t1\t1\t{minimizers}{level}\t0\tunclassified");
-                assert!(parser
-                    .parse_entry(line.as_bytes(), &mut path)
-                    .unwrap()
-                    .is_none());
+                assert!(matches!(
+                    parser.parse_entry(line.as_bytes(), &mut path),
+                    Err(ParseError::Unclassified)
+                ));
             }
         }
     }
@@ -434,8 +488,8 @@ mod tests {
             let input = format!("{statistics}\tU\t0\tunclassified");
             assert!(matches!(
                 parse(input.as_bytes()),
-                Err(ParseError(ParseErrorKind::InvalidFloat { field: actual, .. }
-                    | ParseErrorKind::InvalidInteger { field: actual, .. }))
+                Err(ParseError::InvalidEntry(InvalidEntryError(EntryFailure::InvalidFloat { field: actual, .. }))
+                    | ParseError::InvalidEntry(InvalidEntryError(EntryFailure::InvalidInteger { field: actual, .. })))
                     if actual == field
             ));
         }
@@ -447,7 +501,9 @@ mod tests {
             let invalid_taxid = format!("20\t1\t1\t{minimizers}U\t00\tunclassified");
             assert!(matches!(
                 parse(invalid_taxid.as_bytes()),
-                Err(ParseError(ParseErrorKind::InvalidTaxid(_)))
+                Err(ParseError::InvalidEntry(InvalidEntryError(
+                    EntryFailure::InvalidTaxid(_)
+                )))
             ));
         }
     }
@@ -513,21 +569,19 @@ mod tests {
     #[test]
     fn blank_unclassified_and_invalid_taxonomy_lines_preserve_lineage() {
         let parser = KrakenReportParser::new();
-        for (line, fails) in [
-            (b" \t\r\n".as_slice(), false),
-            (b"20\t1\t1\tU\t0\tunclassified", false),
-            (b"broken", true),
-            (b"100\t4\t0\tG2\t02\t  Genus", true),
+        for line in [
+            b" \t\r\n".as_slice(),
+            b"20\t1\t1\tU\t0\tunclassified",
+            b"broken",
+            b"100\t4\t0\tG2\t02\t  Genus",
         ] {
             let mut path = LineagePath::new();
             parser
                 .parse_entry(b"100\t4\t0\tD\t2\tBacteria", &mut path)
-                .unwrap()
                 .unwrap();
-            assert_eq!(parser.parse_entry(line, &mut path).is_err(), fails);
+            assert!(parser.parse_entry(line, &mut path).is_err());
             let species = parser
                 .parse_entry(b"100\t4\t4\tS\t11\t  Species", &mut path)
-                .unwrap()
                 .unwrap();
             assert_eq!(
                 species
@@ -558,7 +612,6 @@ mod tests {
 
                 let species = parser
                     .parse_entry(b"100\t4\t4\tS\t21\t    Species B", &mut path)
-                    .unwrap()
                     .unwrap();
                 assert_eq!(
                     species
@@ -574,22 +627,14 @@ mod tests {
     }
 
     #[test]
-    fn parsing_skips_blank_lines_between_report_rows() {
-        let entries = parse(
-            b"\n \t\r\n100\t4\t0\tD\t2\tBacteria\n\t\n100\t4\t4\t20\t5\tS\t11\t  Species\n \n",
-        )
-        .unwrap();
-        assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0].taxon().taxid().as_str(), "2");
-        assert_eq!(entries[1].taxon().taxid().as_str(), "11");
-    }
-
-    #[test]
-    fn blank_lines_are_not_report_rows() {
+    fn blank_lines_return_empty_line_errors() {
         let parser = KrakenReportParser::new();
         let mut path = LineagePath::new();
         for line in [b"".as_slice(), b" ", b"\t", b" \t\r\n\x0c"] {
-            assert!(matches!(parser.parse_entry(line, &mut path), Ok(None)));
+            assert!(matches!(
+                parser.parse_entry(line, &mut path),
+                Err(ParseError::EmptyLine)
+            ));
         }
     }
 
@@ -600,7 +645,9 @@ mod tests {
         for line in [b"broken".as_slice(), b" \tbroken\r", b"\0", b"\xc2\xa0"] {
             assert!(matches!(
                 parser.parse_entry(line, &mut path),
-                Err(ParseError(ParseErrorKind::InvalidFieldCount { .. }))
+                Err(ParseError::InvalidEntry(InvalidEntryError(
+                    EntryFailure::InvalidFieldCount { .. }
+                )))
             ));
         }
     }
@@ -609,14 +656,20 @@ mod tests {
     fn rejects_missing_level() {
         let error = parse(b"100.00\t10\t0\t\t1\troot\n").expect_err("expected an error");
 
-        assert!(matches!(error.0, ParseErrorKind::MissingLevel));
+        assert!(matches!(
+            error,
+            ParseError::InvalidEntry(InvalidEntryError(EntryFailure::MissingLevel))
+        ));
     }
 
     #[test]
     fn rejects_odd_taxon_indentation() {
         let error = parse(b"100.00\t10\t1\tD\t2\t Bacteria\n").expect_err("expected an error");
 
-        assert!(matches!(error.0, ParseErrorKind::InvalidTaxonIndentation));
+        assert!(matches!(
+            error,
+            ParseError::InvalidEntry(InvalidEntryError(EntryFailure::InvalidTaxonIndentation))
+        ));
     }
 
     #[test]
@@ -624,11 +677,11 @@ mod tests {
         let error = parse(b"invalid\t10\t0\tR\t1\troot\n").expect_err("expected an error");
 
         assert!(matches!(
-            error.0,
-            ParseErrorKind::InvalidFloat {
+            error,
+            ParseError::InvalidEntry(InvalidEntryError(EntryFailure::InvalidFloat {
                 field: "percentage",
                 ..
-            }
+            }))
         ));
     }
 
@@ -638,11 +691,11 @@ mod tests {
         let error = parse(contents).expect_err("expected an error");
 
         assert!(matches!(
-            error.0,
-            ParseErrorKind::InvalidUtf8 {
+            error,
+            ParseError::InvalidEntry(InvalidEntryError(EntryFailure::InvalidUtf8 {
                 field: "taxonomic name",
                 ..
-            }
+            }))
         ));
     }
 
@@ -818,9 +871,9 @@ mod tests {
                 let line = format!("100\t4\t0\t{level}\t{taxid}\tAnother top-level taxon");
                 assert!(matches!(
                     parser.parse_entry(line.as_bytes(), &mut path),
-                    Err(ParseError(ParseErrorKind::InvalidLineagePath(
+                    Err(ParseError::InvalidEntry(InvalidEntryError(EntryFailure::InvalidLineagePath(
                         LineagePathError::InvalidDescent { current_depth: actual, target_depth: 0 }
-                    ))) if actual == current_depth
+                    )))) if actual == current_depth
                 ));
                 assert_eq!(path.lineage, lineage);
                 assert_eq!(path.depth, Some(current_depth));
@@ -834,15 +887,12 @@ mod tests {
             let parser = KrakenReportParser::new();
             let mut path = LineagePath::new();
             let parent = format!("100\t4\t0\t{parent_level}\t{taxid}\tParent");
-            let entry = parser
-                .parse_entry(parent.as_bytes(), &mut path)
-                .unwrap()
-                .unwrap();
+            let entry = parser.parse_entry(parent.as_bytes(), &mut path).unwrap();
 
             assert!(matches!(
                 parser.parse_entry(b"100\t4\t4\tG\t10\t    Genus", &mut path),
-                Err(ParseError(ParseErrorKind::InvalidLineagePath(
-                    LineagePathError::UnknownDepth { depth: 1 }
+                Err(ParseError::InvalidEntry(InvalidEntryError(
+                    EntryFailure::InvalidLineagePath(LineagePathError::UnknownDepth { depth: 1 })
                 )))
             ));
             assert_eq!(path.lineage, slice::from_ref(entry.taxon()));
@@ -871,8 +921,8 @@ mod tests {
 
         assert!(matches!(
             parser.parse_entry(b"100\t4\t0\tD\t2\t  Bacteria", &mut path),
-            Err(ParseError(ParseErrorKind::InvalidLineagePath(
-                LineagePathError::UnknownDepth { depth: 0 }
+            Err(ParseError::InvalidEntry(InvalidEntryError(
+                EntryFailure::InvalidLineagePath(LineagePathError::UnknownDepth { depth: 0 })
             )))
         ));
         assert_eq!(path.lineage, [taxon("G", "10"), taxon("S", "11")]);
@@ -887,9 +937,9 @@ mod tests {
             let line = format!("100\t4\t4\tG\t10\t{}Genus", "  ".repeat(hierarchy_depth));
             assert!(matches!(
                 parser.parse_entry(line.as_bytes(), &mut path),
-                Err(ParseError(ParseErrorKind::InvalidLineagePath(
+                Err(ParseError::InvalidEntry(InvalidEntryError(EntryFailure::InvalidLineagePath(
                     LineagePathError::UnknownDepth { depth }
-                ))) if depth == hierarchy_depth - 1
+                )))) if depth == hierarchy_depth - 1
             ));
             assert!(path.lineage.is_empty());
             assert_eq!(path.depth, None);
@@ -941,12 +991,7 @@ mod tests {
             "100\t4\t0\tR2\t10\t    Group",
             "100\t4\t4\tD\t2\t      Bacteria",
         ]
-        .map(|line| {
-            parser
-                .parse_entry(line.as_bytes(), &mut path)
-                .unwrap()
-                .unwrap()
-        });
+        .map(|line| parser.parse_entry(line.as_bytes(), &mut path).unwrap());
         assert_eq!(
             path.lineage(),
             &entries
@@ -957,7 +1002,6 @@ mod tests {
 
         let archaea = parser
             .parse_entry(b"100\t4\t4\tD\t3\t    Archaea", &mut path)
-            .unwrap()
             .unwrap();
         assert!(archaea.lineage().is_empty());
         assert_eq!(path.depth, Some(2));

@@ -140,7 +140,7 @@ local({
     # Each R entry point adds report paths without changing the underlying failure.
     write_lines(character(), path("empty-report.tsv"))
     write_lines("broken", path("malformed-report.tsv"))
-    for (name in c("malformed-report.tsv", "missing-report.tsv")) {
+    for (name in c("malformed-report.tsv", "invalid-unclassified.tsv", "missing-report.tsv")) {
         bad_report <- path(name)
         error <- .Call("wrap__read_kreport", bad_report, NULL, PACKAGE = "mire")$err
         stopifnot(!is.null(error), grepl(bad_report, error, fixed = TRUE))
@@ -193,8 +193,21 @@ local({
               identical(as.numeric(counts$kmer_total$ACGT), c(10, 10, NA)),
               identical(as.numeric(counts$kmer_unique$ACGT), c(4, 4, NA)))
 
+    # Blank and unclassified report rows preserve extraction, joins, and counts.
+    call("kractor_koutput", path("unclassified.tsv"), path("kraken.tsv"), NULL,
+         "G", NULL, NULL, NULL, TRUE, path("unclassified-selected.tsv"), 1L, 1L, 32L, 0L, 3L)
+    stopifnot(identical(read_lines(path("unclassified-selected.tsv")), kraken[1:2]))
+    call("koutput_reads", path("unclassified.tsv"), path("kraken.tsv"), path("r1.fq"), NULL,
+         path("unclassified-joined.tsv.gz"), NULL, NULL, list(tag("BARCODE")), NULL,
+         1L, 1L, 2048L, 1L, 1L, 3L)
+    stopifnot(identical(read_lines(path("unclassified-joined.tsv.gz")), joined))
+    unclassified_counts <- call("krcount", path("joined.tsv.gz"), path("unclassified.tsv"),
+                                "G__Genus", NULL, "BARCODE", 1L, 0L)
+    stopifnot(identical(unclassified_counts, counts))
+
     # Reports without selected taxa produce empty results in every workflow.
-    for (selection in list(list("empty-report.tsv", NULL), list("report.tsv", "999"))) {
+    for (selection in list(list("empty-report.tsv", NULL),
+                           list("unclassified-only.tsv", NULL), list("report.tsv", "999"))) {
         report_path <- path(selection[[1L]])
         taxonomy <- selection[[2L]]
         empty <- call("read_kreport", report_path, taxonomy)

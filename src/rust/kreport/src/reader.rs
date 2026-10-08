@@ -4,7 +4,9 @@ use std::io::{self, Read};
 use bytes::{Bytes, BytesMut};
 use memchr::memchr;
 
-use crate::domain::{EntrySpec, KrakenReport, KrakenReportEntry, KrakenReportParser, LineagePath};
+use crate::domain::{
+    EntrySpec, KrakenReport, KrakenReportEntry, KrakenReportParser, LineagePath, ParseError,
+};
 use crate::error::Error;
 
 /// Read a six- or eight-column report from an input source.
@@ -47,8 +49,24 @@ use crate::error::Error;
 /// # Ok::<(), kreport::Error>(())
 /// ```
 pub fn load_kreport<R: Read>(reader: R, entry_spec: EntrySpec) -> Result<KrakenReport, Error> {
+    // The reader parses every row before selection, so unselected ancestors
+    // still contribute to selected entries' lineages.
     let mut reader = KrakenReportReader::with_entry_spec(entry_spec, reader);
-    let entries = reader.entries().collect::<Result<Vec<_>, Error>>()?;
+    let entries = reader
+        .entries()
+        .filter(|entry| {
+            // Skip only blank lines and validated unclassified rows; validation
+            // errors from malformed unclassified rows must still propagate.
+            !matches!(
+                entry,
+                Err(Error::Parse {
+                    source: ParseError::EmptyLine | ParseError::Unclassified,
+                    ..
+                })
+            )
+        })
+        // Preserve report order and stop at the first remaining read or parse error.
+        .collect::<Result<Vec<_>, Error>>()?;
     Ok(KrakenReport::new(entries))
 }
 
@@ -58,6 +76,8 @@ pub fn load_kreport<R: Read>(reader: R, entry_spec: EntrySpec) -> Result<KrakenR
 /// Ancestor lineages omit the current taxon and ancestors whose major rank is
 /// root, such as `R`, `R1` and `R2`.
 /// With no conditions, all classified entries are returned, including root entries.
+/// Blank and unclassified rows return parsing errors with their report line.
+/// Reading can continue after these errors.
 ///
 /// ```
 /// use kreport::KrakenReportReader;
@@ -128,15 +148,18 @@ impl<R: Read> KrakenReportReader<R> {
     }
 
     /// Read the next selected entry with its ancestor lineage.
-    /// Blank and unclassified rows are skipped. Ancestor lineages omit the current
-    /// taxon and ancestors whose major rank is root, such as `R`, `R1` and `R2`.
+    /// Ancestor lineages omit the current taxon and ancestors whose major rank is
+    /// root, such as `R`, `R1` and `R2`.
     /// `Ok(None)` means no selected entries remain.
     ///
     /// # Errors
     ///
-    /// Returns an [`Error`] if reading or parsing an entry fails. Taxonomy
-    /// conditions do not suppress errors in unselected rows. Malformed
-    /// unclassified rows also produce errors.
+    /// Returns an [`Error`] if reading fails or a line cannot produce an entry,
+    /// including blank and unclassified rows. Match [`ParseError::EmptyLine`] and
+    /// [`ParseError::Unclassified`] to identify those two cases.
+    /// Reading can continue with the next line.
+    /// Taxonomy conditions do not suppress errors in unselected rows.
+    /// Malformed unclassified rows return their field validation error.
     /// A missing parent or a second top-level entry is a parsing error.
     pub fn read_entry(&mut self) -> Result<Option<KrakenReportEntry>, Error> {
         while let Some(line) = self.reader.read_line() {
@@ -148,17 +171,14 @@ impl<R: Read> KrakenReportReader<R> {
             })?;
             // Parse every row before selection so unselected ancestors still
             // advance the path and malformed rows still report their errors.
-            let Some(entry) = self
+            let entry = self
                 .parser
                 .parse_entry(&line, &mut self.path)
                 .map_err(|source| Error::Parse {
                     // The line has been delivered, so offset now identifies it.
                     line: self.offset(),
                     source,
-                })?
-            else {
-                continue;
-            };
+                })?;
             if !self.entry_spec.is_satisfied_by(&entry) {
                 continue;
             }
@@ -173,7 +193,8 @@ impl<R: Read> KrakenReportReader<R> {
     ///
     /// # Errors
     ///
-    /// Yields `Err(error)` if reading or parsing an entry fails.
+    /// Yields `Err(error)` if reading fails or a line cannot produce an entry,
+    /// including blank and unclassified rows.
     /// After a parsing error, iteration can continue with the following report line.
     ///
     /// ```
@@ -311,13 +332,114 @@ mod tests {
     use super::*;
     use crate::domain::{EntrySpecScope, TaxonSpec};
 
-    const FILTER_REPORT: &[u8] = b"0\t0\t0\tU\t0\tunclassified\n100\t4\t0\tR\t1\troot\n100\t4\t0\tD\t2\t  Bacteria\n100\t4\t0\tG2\t10\t    Genus A\n50\t2\t2\tS\t11\t      Species A\n50\t2\t2\tS\t12\t      Species B\n100\t4\t0\tG\t20\t    Genus B\n100\t4\t4\tS\t21\t      Species C\n100\t4\t0\tD\t3\t  Archaea\n100\t4\t4\tS\t31\t    Species D\n";
+    const FILTER_REPORT: &[u8] = b"100\t4\t0\tR\t1\troot\n100\t4\t0\tD\t2\t  Bacteria\n100\t4\t0\tG2\t10\t    Genus A\n50\t2\t2\tS\t11\t      Species A\n50\t2\t2\tS\t12\t      Species B\n100\t4\t0\tG\t20\t    Genus B\n100\t4\t4\tS\t21\t      Species C\n100\t4\t0\tD\t3\t  Archaea\n100\t4\t4\tS\t31\t    Species D\n";
 
     fn filters(labels: &[&str]) -> HashSet<TaxonSpec> {
         labels
             .iter()
             .map(|label| TaxonSpec::parse((*label).into()).unwrap())
             .collect()
+    }
+
+    #[test]
+    fn entry_iteration_reports_blank_and_unclassified_rows_and_continues() {
+        let input = b"100\t4\t0\tD\t2\tBacteria\n \t\n20\t1\t1\tU\t0\tunclassified\n100\t4\t4\tS\t11\t  Species\n";
+        let mut reader = KrakenReportReader::new(input.as_slice());
+        let mut entries = reader.entries();
+        let bacteria = entries.next().unwrap().unwrap();
+        assert!(matches!(
+            entries.next(),
+            Some(Err(Error::Parse {
+                line: 2,
+                source: ParseError::EmptyLine
+            }))
+        ));
+        assert!(matches!(
+            entries.next(),
+            Some(Err(Error::Parse {
+                line: 3,
+                source: ParseError::Unclassified
+            }))
+        ));
+        let species = entries.next().unwrap().unwrap();
+        assert_eq!(species.lineage(), std::slice::from_ref(bacteria.taxon()));
+        assert!(entries.next().is_none());
+        assert_eq!(reader.offset(), 4);
+    }
+
+    #[test]
+    fn malformed_entries_share_the_invalid_entry_category() {
+        for input in [
+            b"broken".as_slice(),
+            b"100\t4\t4\tX\t10\tTaxon",
+            b"100\t4\t4\tG\t01\tTaxon",
+            b"100\t4\t4\tG\t10\t  Missing parent",
+            b"invalid\t4\t4\tG\t10\tTaxon",
+            b"100\t4\t4\tinvalid\t5\tG\t10\tTaxon",
+        ] {
+            let mut reader = KrakenReportReader::new(input);
+            assert!(matches!(
+                reader.read_entry(),
+                Err(Error::Parse {
+                    line: 1,
+                    source: ParseError::InvalidEntry(_)
+                })
+            ));
+        }
+    }
+
+    #[test]
+    fn invalid_entry_errors_preserve_messages_and_numeric_sources() {
+        let input = b"100\tinvalid\t4\tG\t10\tTaxon";
+        let mut reader = KrakenReportReader::new(input.as_slice());
+        let Error::Parse {
+            line,
+            source: ParseError::InvalidEntry(error),
+        } = reader.read_entry().unwrap_err()
+        else {
+            panic!("expected an invalid entry");
+        };
+        assert_eq!(line, 1);
+        assert_eq!(
+            error.to_string(),
+            "Invalid integer value 'invalid' in clade reads"
+        );
+        let cause = error.source().unwrap();
+        assert!(cause.is::<std::num::ParseIntError>());
+        assert_eq!(cause.to_string(), "invalid digit found in string");
+        assert!(format!("{error:?}").contains("clade reads"));
+    }
+
+    #[test]
+    fn loading_skips_blank_and_unclassified_rows_but_keeps_real_parse_errors() {
+        for (statistics, message) in [
+            ("invalid\t1\t1", "percentage"),
+            ("20\t1\tinvalid", "direct reads"),
+            ("20\t1\t1\tinvalid\t5", "minimizer count"),
+        ] {
+            let input =
+                format!("\n20\t1\t1\tU\t0\tunclassified\n{statistics}\tU\t0\tunclassified\n");
+            let error =
+                load_kreport(input.as_bytes(), EntrySpec::new(Default::default())).unwrap_err();
+            assert!(matches!(error, Error::Parse {
+                line: 3,
+                source: ParseError::InvalidEntry(ref source),
+            } if source.to_string().contains(message)));
+        }
+    }
+
+    #[test]
+    fn loading_skips_blank_lines_between_report_rows() {
+        let report = load_kreport(
+            b"\n \t\r\n100\t4\t0\tD\t2\tBacteria\n\t\n100\t4\t4\t20\t5\tS\t11\t  Species\n \n"
+                .as_slice(),
+            EntrySpec::new(Default::default()),
+        )
+        .unwrap();
+        let entries: Vec<_> = report.into_iter().collect();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].taxon().taxid().as_str(), "2");
+        assert_eq!(entries[1].taxon().taxid().as_str(), "11");
     }
 
     #[test]
@@ -373,7 +495,7 @@ mod tests {
                 reader.read_entry().unwrap().is_none(),
                 "capacity {capacity}"
             );
-            assert_eq!(reader.offset(), 10);
+            assert_eq!(reader.offset(), 9);
         }
     }
 
@@ -540,7 +662,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [vec!["2"], vec!["2", "10"], vec!["2", "10"]]
         );
-        assert_eq!(reader.offset(), 10);
+        assert_eq!(reader.offset(), 9);
     }
 
     #[test]
@@ -647,7 +769,7 @@ mod tests {
                         actual, expected,
                         "{labels:?}, capacity {capacity}, minimizers {minimizers}"
                     );
-                    assert_eq!(reader.offset(), 10);
+                    assert_eq!(reader.offset(), 9);
                 }
             }
         }
@@ -715,6 +837,13 @@ mod tests {
         assert!(matches!(
             reader.read_entry(),
             Err(Error::Parse {
+                line: 2,
+                source: ParseError::EmptyLine
+            })
+        ));
+        assert!(matches!(
+            reader.read_entry(),
+            Err(Error::Parse {
                 line: 3,
                 source
             }) if source.to_string() == "Invalid line with 1 fields; expected 6 or 8"
@@ -778,7 +907,19 @@ mod tests {
         ] {
             let load_error = load_kreport(input, EntrySpec::new(HashSet::default())).unwrap_err();
             let mut reader = KrakenReportReader::new(input);
-            let read_error = reader.entries().collect::<Result<Vec<_>, _>>().unwrap_err();
+            let read_error = reader
+                .entries()
+                .filter(|entry| {
+                    !matches!(
+                        entry,
+                        Err(Error::Parse {
+                            source: ParseError::EmptyLine | ParseError::Unclassified,
+                            ..
+                        })
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap_err();
             assert_eq!(load_error.to_string(), read_error.to_string());
             for error in [load_error, read_error] {
                 assert_eq!(
@@ -813,14 +954,28 @@ mod tests {
     }
 
     #[test]
-    fn yields_entries_across_buffers_and_skips_blank_lines() {
+    fn yields_entries_and_blank_line_errors_across_buffers() {
         let input = b"\n100\t4\t0\tR\t1\troot\n \t\n100\t4\t2\t30\t7\tD\t2\t  Bacteria";
         for capacity in 1..=input.len() {
             let mut reader = KrakenReportReader::with_capacity(capacity, Cursor::new(input));
+            assert!(matches!(
+                reader.read_entry(),
+                Err(Error::Parse {
+                    line: 1,
+                    source: ParseError::EmptyLine
+                })
+            ));
             let root = reader.read_entry().unwrap().unwrap();
             assert_eq!(root.taxon().taxid().as_str(), "1");
             assert!(root.lineage().is_empty());
             assert_eq!(reader.offset(), 2);
+            assert!(matches!(
+                reader.read_entry(),
+                Err(Error::Parse {
+                    line: 3,
+                    source: ParseError::EmptyLine
+                })
+            ));
             let bacteria = reader.read_entry().unwrap().unwrap();
             assert_eq!(bacteria.taxon().taxid().as_str(), "2");
             assert!(bacteria.lineage().is_empty());
@@ -865,11 +1020,21 @@ mod tests {
     }
 
     #[test]
-    fn empty_and_blank_only_inputs_reach_eof() {
-        for input in [b"".as_slice(), b"\n \t\n"] {
-            let mut reader = KrakenReportReader::new(Cursor::new(input));
-            assert!(reader.read_entry().unwrap().is_none());
+    fn empty_input_reaches_eof() {
+        let mut reader = KrakenReportReader::new(b"".as_slice());
+        assert!(reader.read_entry().unwrap().is_none());
+    }
+
+    #[test]
+    fn blank_only_input_reports_each_line_before_eof() {
+        let mut reader = KrakenReportReader::new(b"\n \t\n".as_slice());
+        for expected_line in 1..=2 {
+            assert!(
+                matches!(reader.read_entry(), Err(Error::Parse { line, source: ParseError::EmptyLine })
+                if line == expected_line)
+            );
         }
+        assert!(reader.read_entry().unwrap().is_none());
     }
 
     #[test]
@@ -905,16 +1070,20 @@ mod tests {
                 Err(io::Error::other("interrupted report input"))
             }
         }
-        for (input, entry_count, expected_line) in [
-            (b"100\t4\t0\tD\t2\tBacteria\n".as_slice(), 1, 2),
+        for (input, entry_count, expected_line, unclassified) in [
+            (b"100\t4\t0\tD\t2\tBacteria\n".as_slice(), 1, 2, false),
             (
                 b"0\t0\t0\tU\t0\tunclassified\n100\t2\t0\tR\t1\troot\n100\t2\t0\tD\t2\t  Bacteria\n100\t2\t2\tS\t11\t    Species\n",
                 3,
                 5,
+                true,
             ),
         ] {
             let source = Cursor::new(input).chain(FailedRead);
             let mut reader = KrakenReportReader::new(source);
+            if unclassified {
+                assert!(matches!(reader.read_entry(), Err(Error::Parse { line: 1, source: ParseError::Unclassified })));
+            }
             for _ in 0..entry_count {
                 reader.read_entry().unwrap().unwrap();
             }
@@ -934,7 +1103,7 @@ mod tests {
     }
 
     #[test]
-    fn skips_unclassified_rows_without_changing_ancestry() {
+    fn unclassified_errors_leave_ancestry_unchanged() {
         let input = b"100\t4\t0\tD\t2\tBacteria\n20\t1\t1\tU\t0\tunclassified\n100\t4\t4\tS\t11\t  Species\n20\t1\t1\tU\t0\tunclassified";
         let mut reader = KrakenReportReader::new(Cursor::new(input));
         assert_eq!(
@@ -947,11 +1116,25 @@ mod tests {
                 .as_str(),
             "2"
         );
+        assert!(matches!(
+            reader.read_entry(),
+            Err(Error::Parse {
+                line: 2,
+                source: ParseError::Unclassified
+            })
+        ));
         let species = reader.read_entry().unwrap().unwrap();
         assert_eq!(species.taxon().taxid().as_str(), "11");
         assert_eq!(species.lineage().len(), 1);
         assert_eq!(species.lineage()[0].taxid().as_str(), "2");
         assert_eq!(reader.offset(), 3);
+        assert!(matches!(
+            reader.read_entry(),
+            Err(Error::Parse {
+                line: 4,
+                source: ParseError::Unclassified
+            })
+        ));
         assert!(reader.read_entry().unwrap().is_none());
         assert_eq!(reader.offset(), 4);
     }
@@ -1145,6 +1328,13 @@ mod tests {
         ] {
             let input = format!("\n100\t4\t4\t{rank}\t10\tCustom taxon\n");
             let mut reader = KrakenReportReader::new(input.as_bytes());
+            assert!(matches!(
+                reader.read_entry(),
+                Err(Error::Parse {
+                    line: 1,
+                    source: ParseError::EmptyLine
+                })
+            ));
             let error = reader.read_entry().unwrap_err();
             assert!(error.to_string().contains("line 2"));
             assert!(error.to_string().contains(message), "{rank}: {error}");
