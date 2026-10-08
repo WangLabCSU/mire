@@ -3,24 +3,23 @@ use std::io::{self, Read};
 
 use bytes::{Bytes, BytesMut};
 use memchr::memchr;
-use rustc_hash::FxHashSet as HashSet;
 
-use crate::domain::{
-    EntrySpec, KrakenReport, KrakenReportEntry, KrakenReportParser, LineagePath, TaxonSpec,
-};
+use crate::domain::{EntrySpec, KrakenReport, KrakenReportEntry, KrakenReportParser, LineagePath};
 use crate::error::Error;
 
 /// Read a six- or eight-column report from an input source.
 ///
-/// An empty set of conditions includes all classified taxa. An entry is selected
-/// when its taxon or an ancestor in its lineage matches a condition.
+/// Select entries with an [`EntrySpec`]. [`EntrySpec::new`] matches an entry's
+/// taxon or an ancestor in its lineage; [`EntrySpec::with_scope`] lets you choose
+/// the matching scope. A specification with no conditions includes all classified taxa.
 /// Supported forms include taxids (`562`),
 /// full rank names (`Genus`), taxonomic levels (`G2`), scientific names (`Bacteria`)
 /// and level-and-name conditions (`G__Genus group`). Rank names are case-sensitive.
 /// `G__Genus group` includes that name at genus or an intermediate level below
 /// genus; `G2__Genus group` requires exactly two levels below genus.
 ///
-/// Create conditions with [`TaxonSpec::parse`] or `try_into()` before reading.
+/// Create conditions with [`TaxonSpec::parse`](crate::TaxonSpec::parse) or `try_into()`
+/// and combine them in an [`EntrySpec`] before reading.
 /// Empty strings and numeric taxids with leading zeros, such as `02`, are rejected. Unrecognized
 /// levels or incomplete conditions, such as `G256`, `X__name` and `G__`, are treated
 /// as scientific names.
@@ -39,18 +38,15 @@ use crate::error::Error;
 ///
 /// # Examples
 /// ```
-/// use kreport::load_kreport;
+/// use kreport::{load_kreport, EntrySpec};
 /// let input = b"100\t2\t2\tD\t2\tBacteria\n";
-/// let report = load_kreport(input.as_slice(), Default::default())?;
+/// let entry_spec = EntrySpec::new(Default::default());
+/// let report = load_kreport(input.as_slice(), entry_spec)?;
 /// let names: Vec<_> = report.iter().map(|entry| entry.taxon().term()).collect();
 /// assert_eq!(names, ["Bacteria"]);
 /// # Ok::<(), kreport::Error>(())
 /// ```
-pub fn load_kreport<R: Read>(
-    reader: R,
-    filters: HashSet<TaxonSpec>,
-) -> Result<KrakenReport, Error> {
-    let entry_spec = EntrySpec::new(filters);
+pub fn load_kreport<R: Read>(reader: R, entry_spec: EntrySpec) -> Result<KrakenReport, Error> {
     let mut reader = KrakenReportReader::with_entry_spec(entry_spec, reader);
     let entries = reader.entries().collect::<Result<Vec<_>, Error>>()?;
     Ok(KrakenReport::new(entries))
@@ -310,8 +306,10 @@ impl<R: Read> LineReader<R> {
 mod tests {
     use std::{error::Error as _, io::Cursor};
 
+    use rustc_hash::FxHashSet as HashSet;
+
     use super::*;
-    use crate::domain::EntrySpecScope;
+    use crate::domain::{EntrySpecScope, TaxonSpec};
 
     const FILTER_REPORT: &[u8] = b"0\t0\t0\tU\t0\tunclassified\n100\t4\t0\tR\t1\troot\n100\t4\t0\tD\t2\t  Bacteria\n100\t4\t0\tG2\t10\t    Genus A\n50\t2\t2\tS\t11\t      Species A\n50\t2\t2\tS\t12\t      Species B\n100\t4\t0\tG\t20\t    Genus B\n100\t4\t4\tS\t21\t      Species C\n100\t4\t0\tD\t3\t  Archaea\n100\t4\t4\tS\t31\t    Species D\n";
 
@@ -320,6 +318,19 @@ mod tests {
             .iter()
             .map(|label| TaxonSpec::parse((*label).into()).unwrap())
             .collect()
+    }
+
+    #[test]
+    fn loading_with_taxon_scope_excludes_unselected_descendants() {
+        let entry_spec = EntrySpec::with_scope(filters(&["10"]), EntrySpecScope::Taxon);
+        let report = load_kreport(FILTER_REPORT, entry_spec).unwrap();
+        assert_eq!(
+            report
+                .iter()
+                .map(|entry| entry.taxon().taxid().as_str())
+                .collect::<Vec<_>>(),
+            ["10"]
+        );
     }
 
     #[test]
@@ -607,7 +618,8 @@ mod tests {
             } else {
                 input
             };
-            let report = load_kreport(input.as_bytes(), HashSet::default()).unwrap();
+            let report =
+                load_kreport(input.as_bytes(), EntrySpec::new(HashSet::default())).unwrap();
             assert_eq!(report.len(), 9);
             for (labels, taxids) in selections {
                 let specs = filters(labels);
@@ -617,7 +629,7 @@ mod tests {
                     .cloned()
                     .collect();
                 assert_eq!(
-                    load_kreport(input.as_bytes(), specs.clone())
+                    load_kreport(input.as_bytes(), EntrySpec::new(specs.clone()))
                         .unwrap()
                         .into_iter()
                         .collect::<Vec<_>>(),
@@ -650,7 +662,9 @@ mod tests {
             FILTER_REPORT,
             b"100\t4\t0\tR\t1\troot\n",
         ] {
-            assert!(load_kreport(input, filters(&["999"])).unwrap().is_empty());
+            assert!(load_kreport(input, EntrySpec::new(filters(&["999"])))
+                .unwrap()
+                .is_empty());
         }
     }
 
@@ -662,7 +676,8 @@ mod tests {
                     "\n100\t4\t0\t{minimizers}{level}\t{taxid}\tParent\n100\t4\t4\t{minimizers}S\t11\t    Species\n"
                 );
                 for taxon_specs in [HashSet::default(), filters(&["999"])] {
-                    let error = load_kreport(input.as_bytes(), taxon_specs).unwrap_err();
+                    let error =
+                        load_kreport(input.as_bytes(), EntrySpec::new(taxon_specs)).unwrap_err();
                     assert!(matches!(
                         error,
                         Error::Parse { line: 3, ref source }
@@ -735,7 +750,9 @@ mod tests {
     #[test]
     fn loading_returns_empty_reports_for_empty_blank_and_unclassified_only_streams() {
         for input in [b"".as_slice(), b" \n", b"0\t0\t0\tU\t0\tunclassified\n"] {
-            assert!(load_kreport(input, HashSet::default()).unwrap().is_empty());
+            assert!(load_kreport(input, EntrySpec::new(HashSet::default()))
+                .unwrap()
+                .is_empty());
         }
     }
 
@@ -759,7 +776,7 @@ mod tests {
                 "Missing taxonomic level",
             ),
         ] {
-            let load_error = load_kreport(input, HashSet::default()).unwrap_err();
+            let load_error = load_kreport(input, EntrySpec::new(HashSet::default())).unwrap_err();
             let mut reader = KrakenReportReader::new(input);
             let read_error = reader.entries().collect::<Result<Vec<_>, _>>().unwrap_err();
             assert_eq!(load_error.to_string(), read_error.to_string());
@@ -789,7 +806,7 @@ mod tests {
         }
         let source = Cursor::new(b"100\t4\t0\tD\t2\tBacteria\n").chain(FailedRead);
         assert!(
-            matches!(load_kreport(source, HashSet::default()), Err(Error::Read {
+            matches!(load_kreport(source, EntrySpec::new(HashSet::default())), Err(Error::Read {
             line: 2, source
         }) if source.kind() == io::ErrorKind::Other && source.to_string() == "failed input")
         );
@@ -832,7 +849,7 @@ mod tests {
     #[test]
     fn crlf_taxonomy_selection_is_independent_of_read_boundaries() {
         let input = b"100\t4\t0\tD\t2\tBacteria\r\n100\t4\t4\tS\t11\t  Species\r\n";
-        let expected = load_kreport(input.as_slice(), filters(&["Bacteria"]))
+        let expected = load_kreport(input.as_slice(), EntrySpec::new(filters(&["Bacteria"])))
             .unwrap()
             .into_iter()
             .collect::<Vec<_>>();
@@ -991,7 +1008,8 @@ mod tests {
                  100\t4\t0\t{minimizers}R1\t131567\t  cellular organisms\n\
                  100\t4\t4\t{minimizers}D\t2\t    Bacteria\n"
             );
-            let report = load_kreport(input.as_bytes(), filters(&["131567"])).unwrap();
+            let report =
+                load_kreport(input.as_bytes(), EntrySpec::new(filters(&["131567"]))).unwrap();
             assert_eq!(
                 report
                     .iter()
@@ -1009,7 +1027,8 @@ mod tests {
                 "", "00", "02", "0002", "taxon-A", "+2", "-2", " 2", "2 ", "２",
             ] {
                 let input = format!("\n100\t4\t4\t{minimizers}G\t{taxid}\tGenus\n");
-                let error = load_kreport(input.as_bytes(), HashSet::default()).unwrap_err();
+                let error =
+                    load_kreport(input.as_bytes(), EntrySpec::new(HashSet::default())).unwrap_err();
                 assert!(
                     error.to_string().contains("line 2") && error.to_string().contains("taxid"),
                     "{taxid:?}: {error}"
@@ -1031,11 +1050,13 @@ mod tests {
                 let input = format!("100\t4\t4\t{minimizers}G2\t{taxid}\tGenus group\n");
                 let report = load_kreport(
                     input.as_bytes(),
-                    [taxid]
-                        .into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<Result<_, _>>()
-                        .unwrap(),
+                    EntrySpec::new(
+                        [taxid]
+                            .into_iter()
+                            .map(TryInto::try_into)
+                            .collect::<Result<_, _>>()
+                            .unwrap(),
+                    ),
                 )
                 .unwrap();
                 let entry = report.iter().next().unwrap();
@@ -1048,7 +1069,7 @@ mod tests {
     #[test]
     fn loading_preserves_line_endings_and_mixed_column_formats() {
         let input = b" \r\n100\t4\t0\tR\t1\troot\r\n100\t4\t2\t30\t7\tD\t2\t  Bacteria";
-        let rows = load_kreport(input.as_slice(), HashSet::default())
+        let rows = load_kreport(input.as_slice(), EntrySpec::new(HashSet::default()))
             .unwrap()
             .into_iter()
             .map(|entry| entry.into_parts())
@@ -1065,7 +1086,7 @@ mod tests {
     #[test]
     fn loading_preserves_unterminated_final_carriage_return() {
         let input = b"100\t4\t0\tD\t2\tBacteria\r";
-        let rows = load_kreport(input.as_slice(), HashSet::default())
+        let rows = load_kreport(input.as_slice(), EntrySpec::new(HashSet::default()))
             .unwrap()
             .into_iter()
             .map(|entry| entry.into_parts())
@@ -1076,7 +1097,7 @@ mod tests {
     #[test]
     fn loading_preserves_branch_changes() {
         let input = b"\n20\t2\t2\tU\t0\tunclassified\n100\t10\t0\tR\t1\troot\n100\t10\t0\tD\t2\t  Bacteria\n100\t10\t0\tG\t10\t    Genus A\n50\t5\t5\tS\t11\t      Species A\n \t \n50\t5\t5\tS\t12\t      Species B\n100\t10\t0\tG\t20\t    Genus B\n100\t10\t10\tS\t21\t      Species C\n100\t10\t0\tD\t3\t  Archaea\n100\t10\t10\tS\t31\t    Species D\n";
-        let rows = load_kreport(input.as_slice(), HashSet::default())
+        let rows = load_kreport(input.as_slice(), EntrySpec::new(HashSet::default()))
             .unwrap()
             .into_iter()
             .map(|entry| entry.into_parts())

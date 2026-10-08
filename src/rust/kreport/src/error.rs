@@ -10,8 +10,8 @@ use crate::domain::ParseError;
 /// inspect the underlying cause.
 ///
 /// ```
-/// use kreport::{load_kreport, Error};
-/// match load_kreport(b"broken\n".as_slice(), Default::default()) {
+/// use kreport::{load_kreport, EntrySpec, Error};
+/// match load_kreport(b"broken\n".as_slice(), EntrySpec::new(Default::default())) {
 ///     Err(Error::Parse { line, source }) => {
 ///         assert_eq!(line, 1);
 ///         eprintln!("{source}");

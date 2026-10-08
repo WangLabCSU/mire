@@ -6,8 +6,8 @@
 //! ancestor lineages without the current taxon or ancestors whose major rank is
 //! root, such as `R`, `R1` and `R2`.
 //! Blank and unclassified rows are skipped.
-//! Create taxon conditions with [`TaxonSpec`]. For [`KrakenReportReader`], combine
-//! them with [`EntrySpec::new`] to match the entry's taxon or its ancestors.
+//! Create taxon conditions with [`TaxonSpec`] and combine them with
+//! [`EntrySpec::new`] to match the entry's taxon or its ancestors.
 //! Use [`EntrySpec::with_scope`] to choose a different matching scope. Inspect the
 //! returned [`KrakenReport`] or [`KrakenReportEntry`] values. Reading failures return [`Error`].
 //!
@@ -16,10 +16,11 @@
 //! ```no_run
 //! use std::fs::File;
 //!
-//! use kreport::{load_kreport, KrakenReport, TaxonSpec};
+//! use kreport::{load_kreport, EntrySpec, KrakenReport, TaxonSpec};
 //!
-//! let filters = [TaxonSpec::parse("D__Bacteria".into())?].into_iter().collect();
-//! let report: KrakenReport = load_kreport(File::open("sample.kreport")?, filters)?;
+//! let taxon_specs = [TaxonSpec::parse("D__Bacteria".into())?].into_iter().collect();
+//! let entry_spec = EntrySpec::new(taxon_specs);
+//! let report: KrakenReport = load_kreport(File::open("sample.kreport")?, entry_spec)?;
 //! for entry in &report {
 //!     println!("{}", entry.taxon().term());
 //! }

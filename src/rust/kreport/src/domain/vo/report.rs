@@ -30,10 +30,10 @@ impl KrakenReport {
     /// Iterate over borrowed entries in report order.
     ///
     /// ```
-    /// use kreport::load_kreport;
+    /// use kreport::{load_kreport, EntrySpec};
     ///
     /// let input = b"100\t2\t0\tD\t2\tBacteria\n100\t2\t2\tG\t10\t  Genus\n";
-    /// let report = load_kreport(input.as_slice(), Default::default())?;
+    /// let report = load_kreport(input.as_slice(), EntrySpec::new(Default::default()))?;
     /// let names: Vec<_> = report.iter().map(|entry| entry.taxon().term()).collect();
     /// assert_eq!(names, ["Bacteria", "Genus"]);
     /// # Ok::<(), kreport::Error>(())
@@ -47,12 +47,12 @@ impl KrakenReport {
     /// Entries can be replaced with updated report entries.
     ///
     /// ```
-    /// use kreport::load_kreport;
+    /// use kreport::{load_kreport, EntrySpec};
     ///
     /// let input = b"100\t2\t2\tD\t2\tBacteria\n";
     /// let updated_input = b"100\t3\t3\tD\t2\tBacteria\n";
-    /// let mut report = load_kreport(input.as_slice(), Default::default())?;
-    /// let updated = load_kreport(updated_input.as_slice(), Default::default())?;
+    /// let mut report = load_kreport(input.as_slice(), EntrySpec::new(Default::default()))?;
+    /// let updated = load_kreport(updated_input.as_slice(), EntrySpec::new(Default::default()))?;
     /// for (entry, replacement) in report.iter_mut().zip(updated) {
     ///     *entry = replacement;
     /// }
@@ -88,10 +88,10 @@ impl<'a> IntoIterator for &'a mut KrakenReport {
 /// Consume the report and yield its entries in report order.
 ///
 /// ```
-/// use kreport::load_kreport;
+/// use kreport::{load_kreport, EntrySpec};
 ///
 /// let input = b"100\t2\t2\tD\t2\tBacteria\n";
-/// let report = load_kreport(input.as_slice(), Default::default())?;
+/// let report = load_kreport(input.as_slice(), EntrySpec::new(Default::default()))?;
 /// let parts: Vec<_> = report.into_iter().map(|entry| entry.into_parts()).collect();
 /// assert_eq!(parts[0].taxon.term(), "Bacteria");
 /// # Ok::<(), kreport::Error>(())

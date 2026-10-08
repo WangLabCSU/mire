@@ -38,18 +38,20 @@ The two application services are `load_kreport` and `KrakenReportReader`.
 Their inputs, results and errors are public types: use `TaxonSpec` for taxon
 conditions, `EntrySpec` to choose which entries to read, `KrakenReport` and
 `KrakenReportEntry` for results, and `Error` for reading failures.
-Use `load_kreport` to collect a report from an input source. Pass an empty set of
-conditions for all classified taxa, or parse conditions with `TaxonSpec::parse`
-to include matching taxa and their descendants:
+Use `load_kreport` to collect a report from an input source and an `EntrySpec`.
+Use `EntrySpec::new(Default::default())` for all classified taxa, or create taxon
+conditions and combine them with `EntrySpec::new` to include matching taxa and
+their descendants:
 
 ```rust,no_run
 use std::fs::File;
 
-use kreport::{load_kreport, KrakenReport, TaxonSpec};
+use kreport::{load_kreport, EntrySpec, KrakenReport, TaxonSpec};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let filters = [TaxonSpec::parse("D__Bacteria".into())?].into_iter().collect();
-    let report: KrakenReport = load_kreport(File::open("sample.kreport")?, filters)?;
+    let taxon_specs = [TaxonSpec::parse("D__Bacteria".into())?].into_iter().collect();
+    let entry_spec = EntrySpec::new(taxon_specs);
+    let report: KrakenReport = load_kreport(File::open("sample.kreport")?, entry_spec)?;
     for entry in &report {
         println!("{}: {}", entry.taxon().taxid(), entry.taxon().term());
     }
@@ -120,11 +122,11 @@ Use `TaxonSpec::parse` or `try_into()` to create conditions for either service:
 | `G__Genus group` | That name at genus or an intermediate level below genus |
 | `G2__Genus group` | That name exactly two levels below genus |
 
-`load_kreport` includes entries whose taxon or an ancestor in their lineage
-matches any condition. With `KrakenReportReader`, choose that behavior through
-`EntrySpecScope::Lineage`, or use `EntrySpecScope::Taxon` to match only the entry's
-taxon. For example, selecting a genus with `Taxon` returns that genus; `Lineage`
-also returns its descendants.
+Both services accept an `EntrySpec`. `EntrySpec::new` selects entries whose taxon
+or an ancestor in their lineage matches any condition. Use `EntrySpec::with_scope`
+with `EntrySpecScope::Taxon` to match only the entry's taxon. For example,
+selecting a genus with `Taxon` returns that genus; `Lineage` also returns its
+descendants.
 Full rank names are case-sensitive. `Genus` selects a rank; use `G__Genus` to
 select taxa named `Genus` at that rank or its intermediate levels.
 Unrecognized levels and incomplete conditions, such as `G256`, `X__name` and
