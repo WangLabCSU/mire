@@ -160,27 +160,24 @@ fn kractor_match_aho(
     while let Some(tab_pos) = memchr(b'\t', &line[field_start ..]) {
         if field_index == 2 {
             let field = &line[field_start .. (field_start + tab_pos)];
-            if let Some(start) = KOUTPUT_TAXID_PREFIX_FINDER.find(field) {
+            let taxid = if let Some(start) = KOUTPUT_TAXID_PREFIX_FINDER.find(field) {
                 let start = start + KOUTPUT_TAXID_PREFIX.len();
                 if let Some(end) = memchr(KOUTPUT_TAXID_SUFFIX, &field[start ..]) {
-                    let id = &field[start .. start + end];
-                    if include_sets.contains(id) {
-                        if exclude_aho.is_none() {
-                            return true;
-                        }
-                    };
+                    &field[start .. start + end]
                 } else {
                     return false;
-                };
-            } else if include_sets.contains(field) {
-                if exclude_aho.is_none() {
-                    return true;
-                };
+                }
             } else {
+                field
+            };
+            if !include_sets.contains(taxid) {
                 return false;
             }
+            if exclude_aho.is_none() {
+                return true;
+            }
         } else if field_index == 3 {
-            // Field 4 (LCA): remainder after the last tab
+            // The fifth field contains LCA mappings.
             field_start += tab_pos + 1;
             let lca;
             if let Some(pos) = memchr(b'\t', &line[field_start ..]) {
@@ -261,6 +258,32 @@ C\tread2\t456\t456\tFungi
         let line = b"C\tid\t999\t999\tBacteria";
 
         assert!(kractor_match_aho(&include, &exclude, line));
+    }
+
+    #[test]
+    fn test_inclusion_is_required_with_exclusion() {
+        let mut include = HashSet::default();
+        include.insert(b"562".as_ref());
+
+        for (taxon, included) in [
+            ("Escherichia coli (taxid 562)", true),
+            ("Other (taxid 999)", false),
+            ("562", true),
+            ("999", false),
+        ] {
+            for (lca, excluded) in [("562:26", false), ("562:13 9606:13", true)] {
+                let line = format!("C\tread1\t{taxon}\t60\t{lca}");
+                for exclude in [None, Some(AhoCorasick::new(["9606:"]).unwrap())] {
+                    let expected = included && !(exclude.is_some() && excluded);
+                    assert_eq!(
+                        kractor_match_aho(&include, &exclude, line.as_bytes()),
+                        expected,
+                        "record: {line}, exclusion enabled: {}",
+                        exclude.is_some()
+                    );
+                }
+            }
+        }
     }
 
     #[test]
