@@ -35,7 +35,7 @@ impl<R: Read> FastqReader<R> {
 
     #[inline]
     pub(crate) fn read_record(&mut self) -> Result<Option<FastqRecord<Bytes>>> {
-        let mut header;
+        let header;
         loop {
             if let Some(line) = self.read_line()? {
                 if line.iter().all(|b| b.is_ascii_whitespace()) {
@@ -60,8 +60,6 @@ impl<R: Read> FastqReader<R> {
         let desc;
         if let Some(line_pos) = memchr2(b' ', b'\t', &header) {
             id = header.slice(1 .. line_pos);
-            let _ = header.split_to(1); // remove the blankspace
-                                        // check if description exits
             if line_pos + 1 >= header.len() {
                 desc = None
             } else {
@@ -178,6 +176,35 @@ mod tests {
         assert_eq!(record.sep.as_ref(), b"+");
         assert_eq!(record.qual.as_ref(), b"!!!!");
 
+        let record = reader.read_record()?.expect("Should have a second record");
+        assert_eq!(record.id.as_ref(), b"seq2");
+        assert!(record.desc.is_none());
+        assert!(reader.read_record()?.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_header_description_boundaries() -> Result<()> {
+        for separator in [" ", "\t"] {
+            for description in ["", "x", "description", "MIRE{UMI:ACGT}", " text\tmore"] {
+                for newline in ["\n", "\r\n"] {
+                    let data = format!(
+                        "@seq1{separator}{description}{newline}ACGT{newline}+{newline}IIII{newline}"
+                    );
+                    let mut reader = create_reader(&data);
+                    let record = reader.read_record()?.expect("Should have a record");
+                    let expected = if description.is_empty() {
+                        None
+                    } else {
+                        Some(description.as_bytes())
+                    };
+                    assert_eq!(record.id.as_ref(), b"seq1");
+                    assert_eq!(record.desc.as_deref(), expected, "input: {data:?}");
+                    assert!(reader.read_record()?.is_none());
+                }
+            }
+        }
         Ok(())
     }
 
