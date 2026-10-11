@@ -1,0 +1,10 @@
+[package]
+name = "codec"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+description = "Synchronous buffered frame encoding and decoding over std::io"
+
+[dependencies]
+bytes = "1.10.1"

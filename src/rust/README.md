@@ -15,6 +15,11 @@ Each supports delimited bytes, byte lines, and standard byte I/O. Its reading co
 ownership analysis, source references, and benchmark instructions are documented
 in that crate.
 
+The independent technical member [`codec`](codec/README.md) provides
+synchronous framed reading through `Decoder` and `FramedRead`, and writing
+through `Encoder` and `FramedWrite`. Codecs define frame formats; the adapters
+drive them with `std::io::Read` and `std::io::Write`. It depends only on `bytes`.
+
 ```text
 R/ -> mire-r -> kreport
             -> mire-sequence -> mire-streaming
