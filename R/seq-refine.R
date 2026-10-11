@@ -165,11 +165,13 @@ rust_seq_refine <- function(reads, ofile1 = NULL, ofile2 = NULL,
         ))
     }
 
+    if (!is.null(ofile1)) ofile1 <- file.path(odir, ofile1)
+    if (!is.null(ofile2)) ofile2 <- file.path(odir, ofile2)
     if (is.null(pprof)) {
         rust_call(
             "seq_refine",
-            fq1 = fq1, ofile1 = file.path(odir, ofile1),
-            fq2 = fq2, ofile2 = file.path(odir, ofile2),
+            fq1 = fq1, ofile1 = ofile1,
+            fq2 = fq2, ofile2 = ofile2,
             actions1 = actions1, actions2 = actions2,
             batch_size = batch_size,
             chunk_bytes = chunk_bytes,
@@ -180,8 +182,8 @@ rust_seq_refine <- function(reads, ofile1 = NULL, ofile2 = NULL,
     } else {
         rust_call(
             "pprof_seq_refine",
-            fq1 = fq1, ofile1 = file.path(odir, ofile1),
-            fq2 = fq2, ofile2 = file.path(odir, ofile2),
+            fq1 = fq1, ofile1 = ofile1,
+            fq2 = fq2, ofile2 = ofile2,
             actions1 = actions1, actions2 = actions2,
             batch_size = batch_size,
             chunk_bytes = chunk_bytes,
