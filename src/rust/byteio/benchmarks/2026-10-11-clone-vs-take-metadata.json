@@ -1,0 +1,17 @@
+{
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+  "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+  "profile": "[profile.release]\nlto = true\ncodegen-units = 1\nstrip = \"debuginfo\"",
+  "cpu": 0,
+  "environment": {},
+  "benchmark_sha256": "063871de8023f6e536ff2fe0cc5fe11f011d322faddf913f23727f6741441476",
+  "old_take_reader_sha256": "f74827334a3292d752a3fa14f2029c17cf29825ddbff68adf6d24c905a21dc25",
+  "old_take_test_exit_code": 101,
+  "old_take_binary_sha256": "f420484ca1c517c8fcff50af1a57f09cc31747e36d099f6e2bb9a402a490ec02",
+  "old_take_lock_sha256": "53a5624d9ae72712ec3329eb34b706a61701f890e2bf9bccfabe7b70d65df6fe",
+  "current_clone_reader_sha256": "eb3251e73a55740b03aeed0fd53a9a135c404a55d42846460b785fcc7a6e2cf5",
+  "current_clone_test_exit_code": 101,
+  "current_clone_binary_sha256": "7784d7b5e7fc15b97bbcc41eed8904ae254320619fedbca1565a7b46adca91d5",
+  "current_clone_lock_sha256": "53a5624d9ae72712ec3329eb34b706a61701f890e2bf9bccfabe7b70d65df6fe",
+  "measurement_note": "Current version copies first block with clone and appends terminal block directly, consuming pos + 1."
+}

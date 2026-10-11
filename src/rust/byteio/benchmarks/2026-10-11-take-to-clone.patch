@@ -1,0 +1,62 @@
+--- a/src/bytes_reader.rs
++++ b/src/bytes_reader.rs
+@@ -1,4 +1 @@
+-use std::{
+-    io::{self, BufRead, ErrorKind, Read},
+-    mem,
+-};
++use std::io::{self, BufRead, ErrorKind, Read};
+@@ -202,2 +199,2 @@
+-                    if let Some(out) = out {
+-                        self.buffer = out;
++                    if let Some(leftover) = out {
++                        self.buffer = leftover;
+@@ -211,0 +209 @@
++
+@@ -213,8 +211,7 @@
+-                // Consume through the delimiter, leaving the tail buffered.
+-                // Splitting shares the allocation without copying bytes, but
+-                // may allocate metadata to track the shared storage.
+-                let read_data = self.buffer.split_to(pos + 1);
+-                let mut out = match out {
+-                    Some(mut out) => {
+-                        out.extend_from_slice(&read_data);
+-                        out
++                let mut delimited = match out {
++                    Some(mut leftover) => {
++                        // Append through the delimiter, leaving the tail
++                        // buffered for the next reading operation.
++                        leftover.extend_from_slice(&available[..pos + 1]);
++                        self.consume(pos + 1);
++                        leftover
+@@ -222 +219,3 @@
+-                    None => read_data,
++                    // Splitting shares the allocation without copying bytes,
++                    // but may allocate metadata to track the shared storage.
++                    None => self.buffer.split_to(pos + 1),
+@@ -226,4 +225,5 @@
+-                let end = delim_policy.delim_end(&out, strip_cr);
+-                out.truncate(end);
+-                return Ok(Some(out));
+-            }
++                let end = delim_policy.delim_end(&delimited, strip_cr);
++                delimited.truncate(end);
++                return Ok(Some(delimited));
++            }
++
+@@ -232,3 +232 @@
+-                // Consume this block so the next iteration can refill it.
+-                out.extend_from_slice(&self.buffer);
+-                self.buffer.advance(self.buffer.len());
++                out.extend_from_slice(available);
+@@ -236,4 +234,6 @@
+-                // Transfer the first block without copying it. Only this
+-                // spanning path creates an empty replacement input buffer.
+-                out = Some(mem::take(&mut self.buffer));
+-            }
++                // Copy the first block, leaving the input allocation
++                // available for subsequent refills.
++                out = Some(self.buffer.clone());
++            }
++            // Consume this block so the next iteration can refill it.
++            self.consume(self.buffer.len());

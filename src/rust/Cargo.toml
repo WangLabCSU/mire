@@ -1,5 +1,5 @@
 [workspace]
-members = ["kreport", "sequence", "koutput", "krcount", "streaming", "r-adapter"]
+members = ["kreport", "sequence", "koutput", "krcount", "streaming", "byteio", "r-adapter"]
 default-members = ["r-adapter"]
 resolver = "2"
 

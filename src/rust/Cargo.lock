@@ -537,6 +537,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mire-byteio"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "memchr",
+]
+
+[[package]]
 name = "mire-koutput"
 version = "0.1.0"
 dependencies = [

@@ -8,6 +8,13 @@ independently. There is no combined `mire-core` crate. The technical member
 entry points. `R/` remains the R package interface. Only `mire-r` depends on R,
 extendr, anyhow, or profiling.
 
+The independent technical member [`mire-byteio`](byteio/README.md) provides
+three independent readers: `VecReader` returns owned byte vectors, `SliceReader`
+returns borrowed byte slices, and `BytesReader` returns `bytes::BytesMut`.
+Each supports delimited bytes, byte lines, and standard byte I/O. Its reading contract,
+ownership analysis, source references, and benchmark instructions are documented
+in that crate.
+
 ```text
 R/ -> mire-r -> kreport
             -> mire-sequence -> mire-streaming

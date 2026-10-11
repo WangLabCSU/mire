@@ -1,0 +1,13 @@
+variant,dataset,retention,run,peak_rss_kib
+take,unaligned,retain,1,97480
+copy_first,unaligned,retain,1,74060
+copy_first,unaligned,retain,2,74008
+take,unaligned,retain,2,97476
+take,unaligned,retain,3,97288
+copy_first,unaligned,retain,3,74076
+take,short_reads,retain,1,167576
+copy_first,short_reads,retain,1,68512
+copy_first,short_reads,retain,2,68304
+take,short_reads,retain,2,167564
+take,short_reads,retain,3,167368
+copy_first,short_reads,retain,3,68516

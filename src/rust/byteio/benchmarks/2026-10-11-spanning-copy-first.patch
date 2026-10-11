@@ -1,0 +1,15 @@
+--- a/src/bytes_reader.rs
++++ b/src/bytes_reader.rs
+@@ -2,3 +2,2 @@
+     io::{self, BufRead, ErrorKind, Read},
+-    mem,
+ };
+@@ -235,5 +234,5 @@
+             } else {
+-                // Transfer the first block without copying it. Only this
+-                // spanning path creates an empty replacement input buffer.
+-                out = Some(mem::take(&mut self.buffer));
++                // Copy the first block and retain the input allocation.
++                out = Some(BytesMut::from(self.buffer.as_ref()));
++                self.buffer.advance(self.buffer.len());
+             }
