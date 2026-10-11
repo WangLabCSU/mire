@@ -141,8 +141,7 @@ rust_kractor_koutput <- function(kreport, koutput, ofile,
     odir <- odir %||% getwd()
     dir_create(odir)
 
-    koutput_batch <- koutput_batch %||% KOUTPUT_BATCH
-    fastq_batch <- fastq_batch %||% FASTQ_BATCH
+    batch_size <- batch_size %||% KOUTPUT_BATCH
     chunk_bytes <- chunk_bytes %||% CHUNK_BYTES
     ofile <- file.path(odir, ofile)
 
@@ -224,8 +223,7 @@ rust_kractor_reads <- function(koutput, reads, ofile1 = NULL, ofile2 = NULL,
     odir <- odir %||% getwd()
     dir_create(odir)
 
-    koutput_batch <- koutput_batch %||% KOUTPUT_BATCH
-    fastq_batch <- fastq_batch %||% FASTQ_BATCH
+    batch_size <- batch_size %||% FASTQ_BATCH
     chunk_bytes <- chunk_bytes %||% CHUNK_BYTES
 
     if (!is.null(ofile1)) ofile1 <- file.path(odir, ofile1)
