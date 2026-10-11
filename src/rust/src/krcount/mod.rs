@@ -129,7 +129,9 @@ fn krcount_internal(
         for report in &kreports {
             if let Some(barcode_map) = counts_map.get(barcode) {
                 if let Some(reads_and_kmer) = barcode_map.get(report.taxid.as_slice()) {
-                    reads_vec.push(Some(reads_and_kmer.reads()));
+                    reads_vec.push(Some(
+                        umi_tag.map_or_else(|| reads_and_kmer.reads(), |_| reads_and_kmer.umi()),
+                    ));
                     kmer_total_vec.push(Some(reads_and_kmer.kmer_total()));
                     kmer_unique_vec.push(Some(reads_and_kmer.kmer_unique()));
                     continue;
