@@ -150,7 +150,7 @@ impl<'a> SinlgeRecordHandle<'a> {
 impl<'a> RecordHandler for SinlgeRecordHandle<'a> {
     type Record = FastqRecord<Bytes>;
     fn setup(&mut self, length: &Bytes, record: &Self::Record) -> Result<()> {
-        if memchr::memchr(b':', length).is_some() {
+        if memchr::memchr(b'|', length).is_some() {
             return Err(anyhow!(
                 "Invalid input: paired-end format detected in kraken2 output, but only single-end reads were provided"
             ));

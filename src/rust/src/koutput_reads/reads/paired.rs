@@ -245,7 +245,7 @@ impl<'a> PairedRecordHandle<'a> {
 impl<'a> RecordHandler for PairedRecordHandle<'a> {
     type Record = (FastqRecord<Bytes>, FastqRecord<Bytes>);
     fn setup(&mut self, length: &Bytes, record: &Self::Record) -> Result<()> {
-        if let Some(separator) = memchr::memchr(b':', length) {
+        if let Some(separator) = memchr::memchr(b'|', length) {
             let (l1, l2) = (&length[.. separator], &length[separator + 1 ..]);
             let len1 = std::str::from_utf8(l1)?
                 .trim()
@@ -269,7 +269,7 @@ impl<'a> RecordHandler for PairedRecordHandle<'a> {
                 })?;
             if record.0.seq.len() != len1 || record.1.seq.len() != len2 {
                 return Err(anyhow!(
-                    "(Read1 and Read2) Invalid input: expected lengths {}:{}, got {}:{}",
+                    "(Read1 and Read2) Invalid input: expected lengths {}|{}, got {}|{}",
                     len1,
                     len2,
                     record.0.seq.len(),

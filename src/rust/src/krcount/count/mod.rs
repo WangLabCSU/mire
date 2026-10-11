@@ -143,20 +143,66 @@ pub(super) fn count_kmers_and_reads<'taxid, P: AsRef<Path> + ?Sized>(
                     let umi_finder = umi_tag.as_ref().map(|tag| Finder::new(tag));
                     let barcode_finder = barcode_tag.as_ref().map(|tag| Finder::new(tag));
 
+                    let mut record_number = 0usize;
                     while let Ok(lines) = reader_rx.recv() {
                         for line in lines {
+                            record_number += 1;
                             let fields: Vec<&[u8]> = line.split(|b| *b == b'\t').collect();
                             if fields.len() != 5 {
-                                return Err(anyhow!("Invalid file: must have 5 fields"));
+                                return Err(anyhow!(
+                                    "Invalid koutreads record {} in '{}': expected 5 tab-separated fields, got {}",
+                                    record_number,
+                                    input.display(),
+                                    fields.len()
+                                ));
                             }
 
                             // ─── Extract and validate fields ───────────────
                             // taxid + tags + lca + seq + qual
-                            let qual = unsafe { fields.get_unchecked(4) };
-                            if !pass_quality_filter(qual, 53) {
-                                continue;
-                            }
                             let seq = unsafe { fields.get_unchecked(3) };
+                            let qual = unsafe { fields.get_unchecked(4) };
+                            let seq_separator_pos = memchr(b' ', seq);
+
+                            // Score each mate's bases, excluding the joining space.
+                            match (seq_separator_pos, memchr(b' ', qual)) {
+                                (Some(pos1), Some(pos2)) => {
+                                    if pos1 != pos2 {
+                                        return Err(anyhow!(
+                                            "Invalid koutreads record {} in '{}': sequence/quality space separators differ: byte {} vs {} (1-based)",
+                                            record_number,
+                                            input.display(),
+                                            pos1 + 1,
+                                            pos2 + 1
+                                        ));
+                                    }
+                                    if !pass_quality_filter(&qual[..pos2], 53)
+                                        || !pass_quality_filter(&qual[pos2 + 1..], 53)
+                                    {
+                                        continue;
+                                    }
+                                }
+                                (None, None) => {
+                                    if !pass_quality_filter(qual, 53) {
+                                        continue;
+                                    }
+                                }
+                                (Some(pos), None) => {
+                                    return Err(anyhow!(
+                                        "Invalid koutreads record {} in '{}': missing quality space separator; expected at byte {} (1-based)",
+                                        record_number,
+                                        input.display(),
+                                        pos + 1
+                                    ));
+                                }
+                                (None, Some(pos)) => {
+                                    return Err(anyhow!(
+                                        "Invalid koutreads record {} in '{}': missing sequence space separator; expected at byte {} (1-based)",
+                                        record_number,
+                                        input.display(),
+                                        pos + 1
+                                    ));
+                                }
+                            }
                             if !pass_complexity_filter(seq, 20) {
                                 continue;
                             }
@@ -204,15 +250,15 @@ pub(super) fn count_kmers_and_reads<'taxid, P: AsRef<Path> + ?Sized>(
                                 // the last 3 k-mers mapped to taxonomy ID #562
                                 let lca = unsafe { fields.get_unchecked(2) };
                                 let kmers =
-                                    match (LCA_SEPARATOR_FINDER.find(lca), memchr(b' ', seq)) {
+                                    match (LCA_SEPARATOR_FINDER.find(lca), seq_separator_pos) {
                                         (Some(lca_pos), Some(seq_pos)) => {
                                             // Paired-end
                                             // Note that paired read data will contain a "|:|" token in this
                                             // list to indicate the end of one read and the beginning of another.
-                                            let lca1 = &lca[.. lca_pos];
-                                            let lca2 = &lca[lca_pos + LCA_SEPARATOR.len() + 1 ..];
-                                            let seq1 = &seq[.. seq_pos];
-                                            let seq2 = &seq[seq_pos + 2 ..];
+                                            let lca1 = &lca[..lca_pos];
+                                            let lca2 = &lca[lca_pos + LCA_SEPARATOR.len()..];
+                                            let seq1 = &seq[..seq_pos];
+                                            let seq2 = &seq[seq_pos + 1..];
                                             [extract_kmers(lca1, seq1)?, extract_kmers(lca2, seq2)?]
                                                 .concat()
                                         }
@@ -220,8 +266,19 @@ pub(super) fn count_kmers_and_reads<'taxid, P: AsRef<Path> + ?Sized>(
                                             // Single-end
                                             extract_kmers(lca, seq)?
                                         }
-                                        (_, _) => {
-                                            return Err(anyhow!("Mismatched LCA/sequence format"));
+                                        (Some(_), None) => {
+                                            return Err(anyhow!(
+                                                "Invalid koutreads record {} in '{}': paired LCA ('|:|'), but sequence has no space separator",
+                                                record_number,
+                                                input.display()
+                                            ));
+                                        }
+                                        (None, Some(_)) => {
+                                            return Err(anyhow!(
+                                                "Invalid koutreads record {} in '{}': paired sequence, but LCA has no '|:|' separator",
+                                                record_number,
+                                                input.display()
+                                            ));
                                         }
                                     };
 
@@ -280,7 +337,7 @@ pub(super) fn count_kmers_and_reads<'taxid, P: AsRef<Path> + ?Sized>(
 
 const LCA_SEPARATOR: &'static [u8] = b"|:|";
 static LCA_SEPARATOR_FINDER: std::sync::LazyLock<Finder> =
-    std::sync::LazyLock::new(|| Finder::new(TAG_PREFIX));
+    std::sync::LazyLock::new(|| Finder::new(LCA_SEPARATOR));
 
 fn extract_tag<'t>(
     tags: &'t [u8],
@@ -297,11 +354,11 @@ fn extract_tag<'t>(
                 }
 
                 // Look for the next space to determine the end of the tag value
-                let end = memchr(b' ', &tags[start ..])
+                let end = memchr(b' ', &tags[start..])
                     .map(|e| start + e)
                     .unwrap_or(tags.len());
 
-                Ok(Some(&tags[start .. end]))
+                Ok(Some(&tags[start..end]))
             } else {
                 return Err(anyhow!("Tag '{}' not found in input", lab));
             }
@@ -325,7 +382,7 @@ fn extract_kmers(lca: &[u8], sequence: &[u8]) -> Result<Vec<Bytes>> {
                         lca
                     ));
                 }
-                let n = std::str::from_utf8(unsafe { pair.get_unchecked(pos + 1 ..) })?
+                let n = std::str::from_utf8(unsafe { pair.get_unchecked(pos + 1..) })?
                     .parse::<usize>()?;
                 Ok(n)
             } else {
